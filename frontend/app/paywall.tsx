@@ -10,7 +10,7 @@ export default function PaywallScreen() {
   return (
     <SafeAreaView style={styles.root} testID="paywall-screen">
       <LinearGradient
-        colors={['rgba(212,255,0,0.22)', 'transparent']}
+        colors={['rgba(255,230,0,0.22)', 'transparent']}
         style={StyleSheet.absoluteFill}
       />
       <ScrollView contentContainerStyle={{ padding: SPACING.xl, paddingTop: SPACING.xxl }}>

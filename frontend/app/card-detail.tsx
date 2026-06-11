@@ -121,19 +121,41 @@ export default function CardDetailScreen() {
 
         <View style={styles.gradeBlock}>
           <View style={styles.gradeRow}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.metaLabel}>Condition</Text>
               <Text style={styles.gradeText}>{p.condition_grade}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.metaLabel}>Value retained</Text>
-              <Text style={styles.gradeMult}>{Math.round(mult * 100)}%</Text>
+              <Text style={styles.gradeMult} testID="value-retained-pct">{Math.round(mult * 100)}%</Text>
             </View>
+          </View>
+
+          {/* Green → Yellow → Red gradient track. The neon-yellow marker sits
+              at `mult` (0–1) along the bar — closer to green = better. */}
+          <View style={styles.retentionTrack} testID="value-retained-bar">
+            <LinearGradient
+              colors={['#EF4444', '#FB923C', '#F59E0B', '#22C55E']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View
+              pointerEvents="none"
+              style={[
+                styles.retentionMarker,
+                { left: `${Math.max(2, Math.min(98, mult * 100))}%` },
+              ]}
+            />
+          </View>
+          <View style={styles.retentionLabels}>
+            <Text style={styles.retentionLabelTxt}>Poor</Text>
+            <Text style={styles.retentionLabelTxt}>Mint</Text>
           </View>
         </View>
 
         <View style={styles.estimateCard}>
-          <Text style={styles.metaLabel}>Estimated value</Text>
+          <Text style={styles.metaLabel}>Valor estimado</Text>
           <Text style={styles.estimateValue} testID="detail-estimated-value">{formatPrice(estimated)}</Text>
           <Text style={styles.estimateSub}>
             {formatPrice(market)} × {Math.round(mult * 100)}% condition
@@ -220,9 +242,13 @@ const styles = StyleSheet.create({
   metaLabel: { color: COLORS.onSurfaceTertiary, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.7 },
   gradeText: { color: COLORS.brand, fontSize: TYPE.xxl, fontWeight: '900', marginTop: 4 },
   gradeMult: { color: COLORS.onSurface, fontSize: TYPE.xxl, fontWeight: '900', marginTop: 4 },
-  estimateCard: { backgroundColor: 'rgba(212,255,0,0.08)', borderColor: 'rgba(212,255,0,0.35)', borderWidth: 1, borderRadius: RADII.md, padding: SPACING.lg, marginBottom: SPACING.xl },
-  estimateValue: { color: COLORS.onSurface, fontSize: TYPE.mega, fontWeight: '900', marginTop: 4, letterSpacing: -1 },
-  estimateSub: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, marginTop: 4 },
+  estimateCard: { backgroundColor: 'rgba(255,230,0,0.06)', borderColor: 'rgba(255,230,0,0.4)', borderWidth: 1, borderRadius: RADII.md, padding: SPACING.lg, marginBottom: SPACING.xl },
+  estimateValue: { color: COLORS.brand, fontSize: 56, fontWeight: '900', marginTop: 6, letterSpacing: -1.5, textShadowColor: 'rgba(255,230,0,0.35)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
+  estimateSub: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, marginTop: 6 },
+  retentionTrack: { height: 10, borderRadius: 999, marginTop: SPACING.md, overflow: 'hidden', backgroundColor: COLORS.surface, position: 'relative' },
+  retentionMarker: { position: 'absolute', top: -3, width: 4, height: 16, backgroundColor: COLORS.brand, borderRadius: 2, marginLeft: -2, shadowColor: COLORS.brand, shadowOpacity: 0.9, shadowRadius: 6, shadowOffset: { width: 0, height: 0 } },
+  retentionLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACING.xs },
+  retentionLabelTxt: { color: COLORS.onSurfaceTertiary, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
   section: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '700', marginBottom: SPACING.md },
   marketRow: { flexDirection: 'row', gap: SPACING.md },
   marketCard: { flex: 1, backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADII.md, borderWidth: 1, borderColor: COLORS.border },
@@ -231,7 +257,7 @@ const styles = StyleSheet.create({
   marketPrice: { color: COLORS.onSurface, fontSize: TYPE.xl, fontWeight: '900', marginTop: 2 },
   warn: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: 'rgba(245,158,11,0.08)', borderColor: 'rgba(245,158,11,0.3)', borderWidth: 1, padding: SPACING.md, borderRadius: RADII.md, marginTop: SPACING.lg },
   warnText: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, flex: 1, lineHeight: 18 },
-  info: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: 'rgba(212,255,0,0.06)', borderColor: 'rgba(212,255,0,0.3)', borderWidth: 1, padding: SPACING.md, borderRadius: RADII.md, marginTop: SPACING.lg },
+  info: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: 'rgba(255,230,0,0.06)', borderColor: 'rgba(255,230,0,0.3)', borderWidth: 1, padding: SPACING.md, borderRadius: RADII.md, marginTop: SPACING.lg },
   infoText: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, flex: 1, lineHeight: 18 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACING.lg, backgroundColor: 'rgba(10,11,14,0.96)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.divider },
   cta: { backgroundColor: COLORS.brand, paddingVertical: SPACING.lg, borderRadius: RADII.md, alignItems: 'center', minHeight: 52, justifyContent: 'center' },

@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   errorText: { color: COLORS.onSurface, fontSize: TYPE.sm, flex: 1 },
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   bottomBlur: { paddingTop: SPACING.lg, paddingBottom: SPACING.xl, alignItems: 'center', backgroundColor: Platform.OS === 'ios' ? 'transparent' : 'rgba(10,11,14,0.92)' },
-  shutter: { width: 88, height: 88, borderRadius: RADII.pill, backgroundColor: 'rgba(212,255,0,0.25)', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: COLORS.brand },
+  shutter: { width: 88, height: 88, borderRadius: RADII.pill, backgroundColor: 'rgba(255,230,0,0.25)', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: COLORS.brand },
   shutterInner: { width: 70, height: 70, borderRadius: RADII.pill, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
   shutterLabel: { color: COLORS.onSurfaceSecondary, fontWeight: '700', marginTop: SPACING.sm, fontSize: TYPE.sm, letterSpacing: 0.3 },
   permWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl, backgroundColor: COLORS.surface },

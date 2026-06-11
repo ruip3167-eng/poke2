@@ -121,7 +121,7 @@ export default function DashboardScreen() {
             </View>
 
             <LinearGradient
-              colors={['rgba(212,255,0,0.18)', 'rgba(212,255,0,0.02)']}
+              colors={['rgba(255,230,0,0.18)', 'rgba(255,230,0,0.02)']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.totalCard}
             >
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   email: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '700', marginTop: 2, maxWidth: 260 },
   iconBtn: { width: 40, height: 40, borderRadius: RADII.pill, backgroundColor: COLORS.surfaceTertiary, alignItems: 'center', justifyContent: 'center' },
   totalCard: {
-    borderRadius: RADII.lg, padding: SPACING.xl, borderWidth: 1, borderColor: 'rgba(212,255,0,0.25)',
+    borderRadius: RADII.lg, padding: SPACING.xl, borderWidth: 1, borderColor: 'rgba(255,230,0,0.25)',
     marginBottom: SPACING.xl,
   },
   totalLabel: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },

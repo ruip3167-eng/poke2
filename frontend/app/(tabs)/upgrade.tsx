@@ -47,7 +47,7 @@ export default function UpgradeScreen() {
   return (
     <SafeAreaView style={styles.root} testID="upgrade-screen">
       <LinearGradient
-        colors={['rgba(212,255,0,0.18)', 'transparent']}
+        colors={['rgba(255,230,0,0.18)', 'transparent']}
         style={StyleSheet.absoluteFill}
       />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   benefitSub: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, marginTop: 2 },
   plans: { flexDirection: 'row', gap: SPACING.md, marginBottom: SPACING.xl },
   planCard: { flex: 1, backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADII.md, borderWidth: 2, borderColor: COLORS.border, position: 'relative' },
-  planCardActive: { borderColor: COLORS.brand, backgroundColor: 'rgba(212,255,0,0.06)' },
+  planCardActive: { borderColor: COLORS.brand, backgroundColor: 'rgba(255,230,0,0.06)' },
   planLabel: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
   planPrice: { color: COLORS.onSurface, fontSize: TYPE.xxl, fontWeight: '900', marginTop: 4 },
   planSub: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, marginTop: 2 },
