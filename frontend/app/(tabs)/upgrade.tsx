@@ -83,19 +83,19 @@ export default function UpgradeScreen() {
               style={[styles.planCard, plan === 'monthly' && styles.planCardActive]}
               onPress={() => setPlan('monthly')}
             >
-              <Text style={styles.planLabel}>Monthly</Text>
-              <Text style={styles.planPrice}>$4.99</Text>
-              <Text style={styles.planSub}>per month</Text>
+              <Text style={styles.planLabel}>Mensal</Text>
+              <Text style={styles.planPrice}>3,99 €</Text>
+              <Text style={styles.planSub}>por mês</Text>
             </Pressable>
             <Pressable
               testID="plan-yearly"
               style={[styles.planCard, plan === 'yearly' && styles.planCardActive]}
               onPress={() => setPlan('yearly')}
             >
-              <View style={styles.savePill}><Text style={styles.savePillText}>SAVE 40%</Text></View>
-              <Text style={styles.planLabel}>Yearly</Text>
-              <Text style={styles.planPrice}>$35.99</Text>
-              <Text style={styles.planSub}>$3.00 / month</Text>
+              <View style={styles.savePill}><Text style={styles.savePillText}>POUPA 41%</Text></View>
+              <Text style={styles.planLabel}>Anual</Text>
+              <Text style={styles.planPrice}>27,99 €</Text>
+              <Text style={styles.planSub}>2,33 € / mês</Text>
             </Pressable>
           </View>
         )}
@@ -103,7 +103,7 @@ export default function UpgradeScreen() {
         {done && (
           <View style={styles.successBox} testID="upgrade-success">
             <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-            <Text style={styles.successText}>You are now Pro. Unlimited scans unlocked.</Text>
+            <Text style={styles.successText}>És agora Pro. Scans ilimitados desbloqueados.</Text>
           </View>
         )}
 
@@ -115,11 +115,11 @@ export default function UpgradeScreen() {
         >
           {loading
             ? <ActivityIndicator color={COLORS.onBrand} />
-            : <Text style={styles.ctaText}>{isPro ? 'You are Pro' : `Start ${plan === 'yearly' ? 'Yearly' : 'Monthly'} Pro`}</Text>}
+            : <Text style={styles.ctaText}>{isPro ? 'És Pro' : 'Subscrever Agora'}</Text>}
         </Pressable>
 
         <Text style={styles.footer}>
-          Mock checkout · Replace with RevenueCat for a production build.
+          Pagamento simulado · Sem cobrança real neste protótipo.
         </Text>
       </ScrollView>
     </SafeAreaView>

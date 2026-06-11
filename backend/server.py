@@ -71,7 +71,7 @@ class PriceResponse(BaseModel):
     tcgplayer_market: Optional[float] = None
     cardmarket_average: Optional[float] = None
     cardmarket_trend: Optional[float] = None
-    currency: str = "USD"
+    currency: str = "EUR"
 
 
 class ConditionPayload(BaseModel):
@@ -402,6 +402,12 @@ async def price(name: str, set_name: Optional[str] = None, number: Optional[str]
             market = float(variant["mid"])
             break
 
+    # Convert TCGplayer USD → EUR for our European audience. Static rate is
+    # fine for an MVP; swap for a live FX feed when needed.
+    USD_TO_EUR = 0.92
+    if market is not None:
+        market = round(market * USD_TO_EUR, 2)
+
     cm = (card.get("cardmarket") or {}).get("prices") or {}
     cm_avg = cm.get("averageSellPrice") or cm.get("avg30") or cm.get("trendPrice")
     cm_trend = cm.get("trendPrice")
@@ -416,6 +422,7 @@ async def price(name: str, set_name: Optional[str] = None, number: Optional[str]
         tcgplayer_market=market,
         cardmarket_average=float(cm_avg) if cm_avg else None,
         cardmarket_trend=float(cm_trend) if cm_trend else None,
+        currency="EUR",
     )
 
 

@@ -187,7 +187,7 @@ export default function ConditionScreen() {
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={styles.summaryLabel}>Value retained</Text>
-            <Text style={styles.summaryValue}>{formatPrice(multiplier * 100).replace('$', '')}%</Text>
+            <Text style={styles.summaryValue}>{Math.round(multiplier * 100)}%</Text>
           </View>
         </View>
       </ScrollView>

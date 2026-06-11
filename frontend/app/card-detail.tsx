@@ -165,7 +165,7 @@ export default function CardDetailScreen() {
         <Text style={styles.section}>Live market</Text>
         <View style={styles.marketRow}>
           <View style={styles.marketCard}>
-            <View style={styles.marketIcon}><Ionicons name="logo-usd" size={16} color={COLORS.brand} /></View>
+            <View style={styles.marketIcon}><Ionicons name="cash-outline" size={16} color={COLORS.brand} /></View>
             <Text style={styles.marketLabel}>TCGplayer</Text>
             <Text style={styles.marketPrice}>{tcg !== null ? formatPrice(tcg) : (isFallback ? formatPrice(market) : '—')}</Text>
           </View>
