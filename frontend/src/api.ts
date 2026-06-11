@@ -21,6 +21,8 @@ export interface ScanResult {
   set_name?: string | null;
   number?: string | null;
   confidence?: string;
+  cropped_image?: string | null;
+  crop_detected?: boolean;
 }
 
 export interface PriceData {

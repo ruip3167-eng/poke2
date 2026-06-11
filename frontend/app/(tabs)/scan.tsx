@@ -88,20 +88,24 @@ export default function ScanScreen() {
 
       const result = await api.analyzeImage(b64, user.uid);
 
-      // Build a smaller thumbnail of the captured photo and stash it in the
-      // scan store so the Card Detail screen can use it as the fallback image
-      // (and persist it to the portfolio when the official art isn't found).
+      // Prefer the auto-cropped card image returned by the backend
+      // (edge-detected + perspective-warped to remove the background).
+      // Falls back to a local thumbnail of the raw photo if cropping failed.
       let scanId: string | null = null;
-      try {
-        const thumb = await ImageManipulator.manipulateAsync(
-          photo.uri,
-          [{ resize: { width: 480 } }],
-          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-        );
-        if (thumb.base64) {
-          scanId = scanStore.putCapturedImage(`data:image/jpeg;base64,${thumb.base64}`);
-        }
-      } catch {}
+      if (result.crop_detected && result.cropped_image) {
+        scanId = scanStore.putCapturedImage(result.cropped_image);
+      } else {
+        try {
+          const thumb = await ImageManipulator.manipulateAsync(
+            photo.uri,
+            [{ resize: { width: 480 } }],
+            { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+          );
+          if (thumb.base64) {
+            scanId = scanStore.putCapturedImage(`data:image/jpeg;base64,${thumb.base64}`);
+          }
+        } catch {}
+      }
 
       // Try to fetch price now (best effort) — but Condition screen will fetch too.
       const updated = await api.incrementScan(user.uid).catch(() => null);
@@ -158,6 +162,10 @@ export default function ScanScreen() {
 
       {/* card framing brackets */}
       <View style={styles.frame} pointerEvents="none">
+        {/* Thin neon outline = the actual capture target. The card MUST sit
+            inside this rectangle. Edge-detection on the backend then crops
+            tightly to the card edges (this rectangle is just the user hint). */}
+        <View style={styles.frameOutline} />
         <View style={[styles.corner, styles.cTL]} />
         <View style={[styles.corner, styles.cTR]} />
         <View style={[styles.corner, styles.cBL]} />
@@ -184,7 +192,7 @@ export default function ScanScreen() {
         </Pressable>
       </SafeAreaView>
 
-      <Text style={styles.hint} testID="scan-hint">Align the card inside the brackets</Text>
+      <Text style={styles.hint} testID="scan-hint">Align the card inside the frame · auto-crop will remove the background</Text>
 
       {error && (
         <View style={styles.errorBanner} testID="scan-error">

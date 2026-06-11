@@ -18,7 +18,10 @@ import uuid
 import json
 import logging
 import re
+import base64
 import httpx
+import cv2
+import numpy as np
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 
@@ -52,6 +55,11 @@ class ScanAnalyzeResponse(BaseModel):
     number: Optional[str] = None
     confidence: str = "medium"
     raw: Optional[str] = None
+    # Card cropped from the captured photo using contour detection. Returned
+    # as a data URI (data:image/jpeg;base64,...) so the frontend can use it
+    # directly as an <Image> src. None if no card-shaped contour was found.
+    cropped_image: Optional[str] = None
+    crop_detected: bool = False
 
 
 class PriceResponse(BaseModel):
@@ -134,6 +142,116 @@ def _extract_json(text: str) -> Dict[str, Any]:
         return {}
 
 
+# ---------- Card cropping (edge detection + perspective warp) ----------
+def _order_points(pts: np.ndarray) -> np.ndarray:
+    """Return the 4 quadrilateral points as (tl, tr, br, bl)."""
+    rect = np.zeros((4, 2), dtype="float32")
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]   # top-left
+    rect[2] = pts[np.argmax(s)]   # bottom-right
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]   # top-right
+    rect[3] = pts[np.argmax(diff)]   # bottom-left
+    return rect
+
+
+def crop_card_from_photo(img_bgr: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Find the largest convex quadrilateral in the photo (assumed to be the
+    Pokémon card) and return a deskewed crop of it. Returns None when no
+    confident detection is made — caller should fall back to the original.
+
+    Standard "document scanner" pipeline: grayscale → blur → Canny → dilate →
+    findContours → approxPolyDP → 4-point perspective warp.
+    """
+    if img_bgr is None or img_bgr.size == 0:
+        return None
+    h, w = img_bgr.shape[:2]
+    # Downscale for contour detection (faster, less noise).
+    target = 800
+    ratio = target / max(h, w) if max(h, w) > target else 1.0
+    if ratio < 1.0:
+        proc = cv2.resize(img_bgr, (int(w * ratio), int(h * ratio)))
+    else:
+        proc = img_bgr.copy()
+
+    gray = cv2.cvtColor(proc, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(gray, 50, 150)
+    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
+
+    proc_area = proc.shape[0] * proc.shape[1]
+    card_quad = None
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < proc_area * 0.12:    # ignore small junk
+            continue
+        peri = cv2.arcLength(c, True)
+        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        if len(approx) == 4 and cv2.isContourConvex(approx):
+            card_quad = approx.reshape(4, 2).astype("float32")
+            break
+
+    if card_quad is None:
+        return None
+
+    # Scale points back to original image coordinates.
+    card_quad = card_quad / ratio
+    rect = _order_points(card_quad)
+    (tl, tr, br, bl) = rect
+
+    width_a = np.linalg.norm(br - bl)
+    width_b = np.linalg.norm(tr - tl)
+    max_w = int(max(width_a, width_b))
+    height_a = np.linalg.norm(tr - br)
+    height_b = np.linalg.norm(tl - bl)
+    max_h = int(max(height_a, height_b))
+    if max_w < 40 or max_h < 40:
+        return None
+
+    dst = np.array(
+        [[0, 0], [max_w - 1, 0], [max_w - 1, max_h - 1], [0, max_h - 1]],
+        dtype="float32",
+    )
+    M = cv2.getPerspectiveTransform(rect, dst)
+    warped = cv2.warpPerspective(img_bgr, M, (max_w, max_h))
+
+    # Pokémon cards are taller than wide — if we got a landscape crop,
+    # rotate 90° so the result is always portrait.
+    if warped.shape[1] > warped.shape[0]:
+        warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
+    return warped
+
+
+def _b64_to_bgr(b64_data: str) -> Optional[np.ndarray]:
+    try:
+        raw = base64.b64decode(b64_data)
+        arr = np.frombuffer(raw, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        return img
+    except Exception:
+        return None
+
+
+def _bgr_to_jpeg_data_uri(img: np.ndarray, max_width: int = 720) -> Optional[str]:
+    try:
+        h, w = img.shape[:2]
+        if w > max_width:
+            new_h = int(h * max_width / w)
+            img = cv2.resize(img, (max_width, new_h), interpolation=cv2.INTER_AREA)
+        ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        if not ok:
+            return None
+        return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("ascii")
+    except Exception:
+        return None
+
+
 # ---------- Routes ----------
 @api.get("/")
 async def root():
@@ -151,6 +269,24 @@ async def scan_analyze(payload: ScanAnalyzeRequest):
     img_b64 = payload.image_base64
     if img_b64.startswith("data:"):
         img_b64 = img_b64.split(",", 1)[-1]
+
+    # Edge-detect + perspective-warp the card out of the photo. This isolates
+    # the card from the table/background. If detection fails (e.g. low
+    # contrast or no clear card edges) we silently fall back to the full
+    # photo so the vision step still runs.
+    cropped_data_uri: Optional[str] = None
+    crop_detected = False
+    vision_b64 = img_b64
+    img_bgr = _b64_to_bgr(img_b64)
+    if img_bgr is not None:
+        warped = crop_card_from_photo(img_bgr)
+        if warped is not None:
+            cropped_data_uri = _bgr_to_jpeg_data_uri(warped, max_width=720)
+            if cropped_data_uri:
+                crop_detected = True
+                # Send only the cleaned crop to Gemini — much higher signal,
+                # the background no longer competes with the card art.
+                vision_b64 = cropped_data_uri.split(",", 1)[-1]
 
     system_msg = (
         "You are a Pokémon TCG card recognition expert. The user gives you a photo of a "
@@ -170,7 +306,7 @@ async def scan_analyze(payload: ScanAnalyzeRequest):
 
         msg = UserMessage(
             text="Identify this Pokémon card. Reply with only the JSON object as instructed.",
-            file_contents=[ImageContent(image_base64=img_b64)],
+            file_contents=[ImageContent(image_base64=vision_b64)],
         )
         raw = await chat.send_message(msg)
     except Exception as e:
@@ -188,6 +324,8 @@ async def scan_analyze(payload: ScanAnalyzeRequest):
         number=(data.get("number") or None),
         confidence="high" if (data.get("set") and data.get("number")) else "medium",
         raw=raw,
+        cropped_image=cropped_data_uri,
+        crop_detected=crop_detected,
     )
 
 
