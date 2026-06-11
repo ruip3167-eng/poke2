@@ -10,6 +10,8 @@ import * as Haptics from 'expo-haptics';
 
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
+import { useRevenueCat } from '@/src/revenuecat-context';
+import { purchaseByIdentifier, getCustomerInfo, hasProAccess } from '@/src/revenuecat';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 
 type PlanKey = 'monthly' | 'yearly';
@@ -49,6 +51,7 @@ const BENEFITS = [
 export default function PaywallScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { available: rcAvailable, refresh: refreshRC } = useRevenueCat();
   // Yearly selected by default — drives conversion to the higher-LTV plan.
   const [selected, setSelected] = useState<PlanKey>('yearly');
   const [loading, setLoading] = useState(false);
@@ -66,7 +69,29 @@ export default function PaywallScreen() {
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     try {
-      // MOCKED purchase — flips is_pro=true on the server regardless of plan.
+      const packageId = selected === 'yearly' ? '$annual' : '$monthly';
+      if (rcAvailable) {
+        // Real RevenueCat purchase — uses the native StoreKit / Billing flow.
+        const res = await purchaseByIdentifier(packageId);
+        if (res.ok && res.isPro) {
+          await refreshRC();
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          router.replace('/(tabs)/dashboard');
+          return;
+        }
+        if (res.reason === 'cancelled') {
+          // user dismissed Apple/Google sheet — silent
+          return;
+        }
+        if (res.reason === 'no-offering' || res.reason?.startsWith('no-')) {
+          setErr('Subscrição indisponível neste momento. Tenta novamente em breve.');
+          return;
+        }
+        setErr(res.reason ?? 'Não foi possível processar a subscrição');
+        return;
+      }
+      // Expo Go / web fallback — keep the existing mock so the app stays usable
+      // until a native build is generated via EAS / Publish.
       await api.upgrade(user.uid);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       router.replace('/(tabs)/dashboard');
@@ -80,6 +105,17 @@ export default function PaywallScreen() {
   const restore = async () => {
     if (!user) return;
     try {
+      if (rcAvailable) {
+        const info = await getCustomerInfo();
+        if (hasProAccess(info)) {
+          await refreshRC();
+          router.replace('/(tabs)/dashboard');
+          return;
+        }
+        setErr('Nenhuma subscrição ativa encontrada nesta conta.');
+        return;
+      }
+      // mock fallback — use backend is_pro flag
       const c = await api.getScanCount(user.uid);
       if (c.is_pro) {
         router.replace('/(tabs)/dashboard');
@@ -191,7 +227,9 @@ export default function PaywallScreen() {
         </Pressable>
 
         <Text style={styles.disclaimer}>
-          Pagamento simulado para efeitos de teste · Não há cobrança real
+          {rcAvailable
+            ? 'Subscrição gerida via RevenueCat · Renovação automática'
+            : 'Pagamento simulado para efeitos de teste · Não há cobrança real'}
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -11,12 +11,14 @@ import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, wit
 
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
+import { useRevenueCat } from '@/src/revenuecat-context';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { scanStore } from '@/src/scan-store';
 
 export default function ScanScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isPro: rcIsPro, available: rcAvailable } = useRevenueCat();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [flash, setFlash] = useState(false);
@@ -24,6 +26,11 @@ export default function ScanScreen() {
   const [error, setError] = useState<string | null>(null);
   const [scanInfo, setScanInfo] = useState<{ count: number; free_limit: number; is_pro: boolean } | null>(null);
   const [active, setActive] = useState(true);
+
+  // Effective Pro status: prefer the RevenueCat `pro_access` entitlement when
+  // the SDK is available (native build). In Expo Go / web fallback, read the
+  // mock `is_pro` flag from the backend scan counter.
+  const isPro = rcAvailable ? rcIsPro : (scanInfo?.is_pro ?? false);
 
   // pause / resume camera when leaving the tab to free up the sensor
   useFocusEffect(
@@ -61,11 +68,12 @@ export default function ScanScreen() {
     if (!cameraRef.current || scanning || !user) return;
     setError(null);
 
-    // Check paywall first
+    // Gate scan access: pro_access entitlement (or mock is_pro) bypasses limit;
+    // otherwise verify backend count < 5.
     try {
       const c = await api.getScanCount(user.uid);
       setScanInfo(c);
-      if (!c.is_pro && c.count >= c.free_limit) {
+      if (!isPro && c.count >= c.free_limit) {
         router.push('/paywall');
         return;
       }
@@ -181,12 +189,12 @@ export default function ScanScreen() {
         </Pressable>
         <View style={styles.counterPill}>
           <Ionicons
-            name={scanInfo?.is_pro ? 'flash' : 'flash-outline'}
+            name={isPro ? 'flash' : 'flash-outline'}
             size={14}
-            color={scanInfo?.is_pro ? COLORS.brand : COLORS.onSurfaceSecondary}
+            color={isPro ? COLORS.brand : COLORS.onSurfaceSecondary}
           />
           <Text style={styles.counterText} testID="scan-counter">
-            {scanInfo?.is_pro ? 'PRO · Unlimited' : (remaining === null ? '—' : `${remaining} free scans left`)}
+            {isPro ? 'PRO · Unlimited' : (remaining === null ? '—' : `${remaining} free scans left`)}
           </Text>
         </View>
         <Pressable onPress={() => setFlash((f) => !f)} style={styles.iconBtn} testID="scan-flash-toggle">

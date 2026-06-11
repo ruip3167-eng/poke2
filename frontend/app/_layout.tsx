@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
 import { AuthProvider } from '@/src/auth-context';
+import { RevenueCatProvider } from '@/src/revenuecat-context';
 
 // Keep the native splash visible from cold start until icon fonts register.
 // Required because @expo/vector-icons' componentDidMount fallback fires
@@ -29,24 +30,26 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#121212' } }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="condition"
-            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-          />
-          <Stack.Screen
-            name="card-detail"
-            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-          />
-          <Stack.Screen
-            name="paywall"
-            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-          />
-        </Stack>
+        <RevenueCatProvider>
+          <StatusBar style="light" />
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#121212' } }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="condition"
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="card-detail"
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="paywall"
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+          </Stack>
+        </RevenueCatProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
