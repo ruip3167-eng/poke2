@@ -28,7 +28,7 @@ const ASPECTS: { key: keyof Condition; title: string; sub: string }[] = [
 
 export default function ConditionScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ name: string; set_name?: string; number?: string }>();
+  const params = useLocalSearchParams<{ name: string; set_name?: string; number?: string; scan_id?: string }>();
   const [cond, setCond] = useState<Condition>({
     centering: 'near_mint',
     corners: 'near_mint',
@@ -78,6 +78,7 @@ export default function ConditionScreen() {
           condition_json: JSON.stringify(cond),
           mode: 'new',
           is_fallback_price: isFallback ? '1' : '0',
+          scan_id: params.scan_id ?? '',
         },
       });
     } catch (e: any) {
@@ -99,6 +100,7 @@ export default function ConditionScreen() {
           condition_json: JSON.stringify(cond),
           mode: 'new',
           is_fallback_price: '1',
+          scan_id: params.scan_id ?? '',
           price_error: e?.message?.slice(0, 200) ?? 'No price data',
         },
       });

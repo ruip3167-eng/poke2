@@ -10,6 +10,7 @@ import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { formatPrice } from '@/src/grading';
+import { scanStore } from '@/src/scan-store';
 const FALLBACK_CARD = 'https://images.unsplash.com/photo-1613771404784-3a5686aa2be3?crop=entropy&cs=srgb&fm=jpg&w=600&q=80';
 
 export default function CardDetailScreen() {
@@ -20,7 +21,8 @@ export default function CardDetailScreen() {
     name: string; set_name?: string; number?: string; image_url?: string;
     market_price: string; tcgplayer_market?: string; cardmarket_average?: string;
     estimated_value: string; condition_grade: string; condition_multiplier: string;
-    condition_json?: string; mode?: string; price_error?: string; is_fallback_price?: string;
+    condition_json?: string; mode?: string; price_error?: string;
+    is_fallback_price?: string; scan_id?: string;
   }>();
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(p.mode === 'saved');
@@ -31,8 +33,18 @@ export default function CardDetailScreen() {
   const mult = Number(p.condition_multiplier || '1');
   const tcg = p.tcgplayer_market && p.tcgplayer_market !== '' ? Number(p.tcgplayer_market) : null;
   const cm = p.cardmarket_average && p.cardmarket_average !== '' ? Number(p.cardmarket_average) : null;
-  const img = p.image_url && p.image_url !== '' ? p.image_url : FALLBACK_CARD;
   const isFallback = p.is_fallback_price === '1';
+
+  // Image source priority: official card art (pokemontcg.io) → photo captured
+  // by the user during the scan → static fallback (so nothing breaks for
+  // portfolio items saved on older versions of the app).
+  const officialUrl = p.image_url && p.image_url !== '' ? p.image_url : null;
+  const capturedUri = scanStore.getCapturedImage(p.scan_id);
+  const displayImage = officialUrl ?? capturedUri ?? FALLBACK_CARD;
+  // The URL we actually persist to MongoDB. We DO save the captured photo
+  // (as a data:image/jpeg;base64,... URI) when the official image is missing —
+  // never the generic Unsplash placeholder.
+  const persistImageUrl = officialUrl ?? capturedUri ?? null;
 
   const save = async () => {
     if (!user) return;
@@ -47,13 +59,15 @@ export default function CardDetailScreen() {
         name: p.name,
         set_name: p.set_name || null,
         number: p.number || null,
-        image_url: p.image_url || null,
+        image_url: persistImageUrl,
         market_price: market,
         estimated_value: estimated,
         condition,
         condition_grade: p.condition_grade,
         condition_multiplier: mult,
       });
+      // Free the in-memory capture once it's been persisted.
+      scanStore.clear(p.scan_id);
       setSavedOk(true);
       setTimeout(() => router.replace('/(tabs)/dashboard'), 600);
     } catch (e: any) {
@@ -79,7 +93,7 @@ export default function CardDetailScreen() {
   return (
     <View style={styles.root} testID="card-detail-screen">
       <View style={styles.heroWrap}>
-        <Image source={{ uri: img }} style={styles.hero} contentFit="cover" />
+        <Image source={{ uri: displayImage }} style={styles.hero} contentFit="cover" />
         <LinearGradient
           colors={['rgba(10,11,14,0)', 'rgba(10,11,14,0.85)', COLORS.surface]}
           style={StyleSheet.absoluteFill}

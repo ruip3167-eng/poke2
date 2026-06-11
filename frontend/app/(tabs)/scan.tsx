@@ -12,6 +12,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, wit
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
+import { scanStore } from '@/src/scan-store';
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -87,6 +88,21 @@ export default function ScanScreen() {
 
       const result = await api.analyzeImage(b64, user.uid);
 
+      // Build a smaller thumbnail of the captured photo and stash it in the
+      // scan store so the Card Detail screen can use it as the fallback image
+      // (and persist it to the portfolio when the official art isn't found).
+      let scanId: string | null = null;
+      try {
+        const thumb = await ImageManipulator.manipulateAsync(
+          photo.uri,
+          [{ resize: { width: 480 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+        );
+        if (thumb.base64) {
+          scanId = scanStore.putCapturedImage(`data:image/jpeg;base64,${thumb.base64}`);
+        }
+      } catch {}
+
       // Try to fetch price now (best effort) — but Condition screen will fetch too.
       const updated = await api.incrementScan(user.uid).catch(() => null);
       if (updated) setScanInfo(updated);
@@ -97,6 +113,7 @@ export default function ScanScreen() {
           name: result.name,
           set_name: result.set_name ?? '',
           number: result.number ?? '',
+          scan_id: scanId ?? '',
         },
       });
     } catch (e: any) {
