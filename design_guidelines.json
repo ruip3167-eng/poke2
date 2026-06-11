@@ -1,0 +1,175 @@
+{
+  "app_name": "PokeValue Scanner",
+  "personality": "7 Dark-First Utility with 6 Glass / Luxe surfaces",
+  "personality_one_liner": "A high-end, stealthy tactical interface with electric neon accents that treats card valuation like a live, high-stakes dashboard.",
+  "color": {
+    "surface": "#0A0B0E",
+    "onSurface": "#F3F4F6",
+    "surfaceSecondary": "#14161C",
+    "onSurfaceSecondary": "#D1D5DB",
+    "surfaceTertiary": "#20232B",
+    "onSurfaceTertiary": "#9CA3AF",
+    "surfaceInverse": "#F3F4F6",
+    "onSurfaceInverse": "#0A0B0E",
+    "brand": "#D4FF00",
+    "brandPrimary": "#D4FF00",
+    "onBrandPrimary": "#000000",
+    "brandSecondary": "#B2D600",
+    "onBrandSecondary": "#000000",
+    "brandTertiary": "rgba(212, 255, 0, 0.12)",
+    "onBrandTertiary": "#D4FF00",
+    "success": "#10B981",
+    "onSuccess": "#000000",
+    "warning": "#F59E0B",
+    "onWarning": "#000000",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#20232B",
+    "borderStrong": "#374151",
+    "divider": "#1A1C23"
+  },
+  "typography": {
+    "displayFontFamily": "Space Grotesk",
+    "textFontFamily": "DM Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use utility-tight spacing for data/checklists and luxe-generous vertical rhythms for the main dashboard and paywall. Thumb zones must be respected for all primary CTAs.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use frosted glass (dark tinted) for the bottom tab bar.",
+      "Use glass for the floating camera scanner controls over the live camera feed.",
+      "Use glass for the sticky 'Add to Portfolio' CTA over scrolling card details.",
+      "Ensure underlying tint is dark enough (≥75% opacity) to guarantee neon text contrast."
+    ],
+    "dont's": [
+      "Never use glass on the condition checklist items or dense data rows; use solid surfaceSecondary instead.",
+      "Do not blur entire background screens."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Dashboard",
+      "purpose": "Command center displaying total portfolio value and a grid of scanned cards.",
+      "layout": "Top section features an oversized 'Space Grotesk' total portfolio value on a subtle brandTertiary gradient background. Below, a 2-column grid (`flexWrap: wrap`, `justifyContent: space-between`) of saved cards with images and current market price. Use surfaceSecondary for cards.",
+      "states": {
+        "loading": "Centered neon spinner.",
+        "empty": "Luxe abstract illustration with 'Your portfolio is empty. Scan your first card.' and a prominent neon 'Scan Card' CTA.",
+        "error": "Readable error message with a 'Retry' button."
+      }
+    },
+    {
+      "name": "Camera Scanner",
+      "purpose": "Full-bleed viewfinder to align and detect the physical card via AI.",
+      "layout": "Full-screen camera view. Overlay an explicit borderStrong frame with neon brandPrimary corner brackets for alignment. Floating glass control bar at the bottom containing a large circular scan/shutter button and a flash toggle.",
+      "states": {
+        "loading": "Scanning animation: a brandPrimary horizontal laser line sweeping across the frame.",
+        "empty": "N/A",
+        "error": "Message 'Card not recognized' with manual entry option."
+      }
+    },
+    {
+      "name": "Condition Assessment",
+      "purpose": "Utility checklist for evaluating physical wear (whitening, scratches).",
+      "layout": "Dark-first utility layout. Single column list of criteria. Use segmented controls (`pill` radius) for grades (e.g., Near Mint, Lightly Played) on solid surfaceSecondary layers. Sticky 'Calculate Value' CTA at the bottom in a keyboard avoiding view.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "N/A",
+        "error": "Error toast."
+      }
+    },
+    {
+      "name": "Card Detail",
+      "purpose": "Showcases the scanned card, live TCGplayer/Cardmarket pricing, and calculated raw value.",
+      "layout": "Cinematic hero card image at the top with a vertical gradient scrim (transparent to ≥70% surface Inverse) to ensure text contrast. Large metrics block below using condensed typography for prices. Sticky glass bottom container with primary CTA.",
+      "states": {
+        "loading": "Skeleton loader for the card image and prices.",
+        "empty": "N/A",
+        "error": "Failed to fetch market data. 'Retry' button."
+      }
+    },
+    {
+      "name": "Freemium Paywall",
+      "purpose": "Upsell screen to unlock unlimited scans.",
+      "layout": "Above-the-fold layout. Dark screen with a subtle dark neon abstract background. Large value headline, 3 benefit bullet points using Phosphor icons inside brandTertiary tinted containers. Clear subscription toggle (Monthly/Yearly) and a massive brandPrimary CTA.",
+      "states": {
+        "loading": "Processing payment spinner.",
+        "empty": "N/A",
+        "error": "Transaction failed message."
+      }
+    },
+    {
+      "name": "Auth",
+      "purpose": "Login/Signup using Firebase.",
+      "layout": "Minimalist single-column form centered vertically. Labels above inputs. surfaceTertiary for input backgrounds. Sticky submit button at the bottom.",
+      "states": {
+        "loading": "Spinner on the button.",
+        "empty": "N/A",
+        "error": "Validation error messages below inputs."
+      }
+    }
+  ],
+  "images": {
+    "card_placeholder": {
+      "url": "https://images.unsplash.com/photo-1613771404784-3a5686aa2be3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODd8MHwxfHNlYXJjaHwxfHxwb2tlbW9uJTIwdHJhZGluZyUyMGNhcmR8ZW58MHx8fHwxNzgxMTg4MDI1fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Pokemon trading cards scattered"
+    },
+    "paywall_background": {
+      "url": "https://images.unsplash.com/photo-1620207418302-439b387441b0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODR8MHwxfHNlYXJjaHwxfHxkYXJrJTIwbmVvbiUyMGFic3RyYWN0JTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3ODExODgwMjV8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Dark purple abstract background with glow"
+    }
+  },
+  "haptics": {
+    "scan_capture": "heavy",
+    "condition_toggle": "light",
+    "primary_button_press": "medium",
+    "tab_switch": "light"
+  },
+  "instructions_to_main_agent": [
+    "No blue allowed. Maintain strict adherence to the obsidian/charcoal base with neon yellow (#D4FF00) accents.",
+    "Ensure all primary text has at least WCAG AA contrast against the dark background. Use #F3F4F6 for primary text.",
+    "For the camera scanner, utilize expo-camera with a full-bleed overlay. The framing brackets must use the brandPrimary neon yellow.",
+    "When displaying the hero card image on the Card Detail screen, MANDATORY gradient-to-dark scrim pattern (transparent to ≥70% surface color) behind any overlaid text.",
+    "Paywall must be above-the-fold and avoid scrolling. Keep pricing visible alongside the primary CTA.",
+    "Use Space Grotesk exclusively for numbers (prices, portfolio totals) to emphasize the utility/fintech feel of the valuation.",
+    "Implement haptics on condition switches and the scan capture button."
+  ]
+}
