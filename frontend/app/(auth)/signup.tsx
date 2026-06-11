@@ -14,6 +14,7 @@ export default function SignupScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -60,15 +61,32 @@ export default function SignupScreen() {
           />
 
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            testID="signup-password-input"
-            style={styles.input}
-            placeholder="At least 6 characters"
-            placeholderTextColor={COLORS.onSurfaceTertiary}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.passwordRow}>
+            <TextInput
+              testID="signup-password-input"
+              style={styles.passwordInput}
+              placeholder="At least 6 characters"
+              placeholderTextColor={COLORS.onSurfaceTertiary}
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Pressable
+              testID="signup-toggle-password"
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={10}
+              style={styles.eyeBtn}
+              accessibilityLabel={showPassword ? 'Ocultar palavra-passe' : 'Ver palavra-passe'}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={20}
+                color={COLORS.onSurfaceTertiary}
+              />
+            </Pressable>
+          </View>
 
           {err && <Text style={styles.error} testID="signup-error">{err}</Text>}
 
@@ -107,6 +125,23 @@ const styles = StyleSheet.create({
   subtitle: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.base, marginBottom: SPACING.xxl },
   label: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, marginBottom: SPACING.xs, marginTop: SPACING.md, fontWeight: '600' },
   input: { backgroundColor: COLORS.surfaceTertiary, borderRadius: RADII.md, padding: SPACING.lg, color: COLORS.onSurface, fontSize: TYPE.lg, borderWidth: 1, borderColor: COLORS.border },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceTertiary,
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingRight: SPACING.md,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    color: COLORS.onSurface,
+    fontSize: TYPE.lg,
+  },
+  eyeBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   error: { color: COLORS.error, marginTop: SPACING.md, fontSize: TYPE.base },
   primaryBtn: { backgroundColor: COLORS.brand, paddingVertical: SPACING.lg, borderRadius: RADII.md, marginTop: SPACING.xl, alignItems: 'center', minHeight: 52, justifyContent: 'center' },
   primaryBtnText: { color: COLORS.onBrand, fontSize: TYPE.lg, fontWeight: '800', letterSpacing: 0.3 },
