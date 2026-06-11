@@ -88,13 +88,15 @@ export default function ScanScreen() {
 
       const result = await api.analyzeImage(b64, user.uid);
 
-      // Prefer the auto-cropped card image returned by the backend
-      // (edge-detected + perspective-warped to remove the background).
-      // Falls back to a local thumbnail of the raw photo if cropping failed.
+      // The backend always returns a card-cropped image (either via real edge
+      // detection or a card-aspect center-crop fallback). Never persist the
+      // raw photo — it still contains the table/background.
       let scanId: string | null = null;
-      if (result.crop_detected && result.cropped_image) {
+      if (result.cropped_image) {
         scanId = scanStore.putCapturedImage(result.cropped_image);
       } else {
+        // Should not happen in practice, but if backend gave no crop at all,
+        // build a small local thumbnail as last resort.
         try {
           const thumb = await ImageManipulator.manipulateAsync(
             photo.uri,

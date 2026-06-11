@@ -155,56 +155,84 @@ def _order_points(pts: np.ndarray) -> np.ndarray:
     return rect
 
 
-def crop_card_from_photo(img_bgr: np.ndarray) -> Optional[np.ndarray]:
-    """
-    Find the largest convex quadrilateral in the photo (assumed to be the
-    Pokémon card) and return a deskewed crop of it. Returns None when no
-    confident detection is made — caller should fall back to the original.
-
-    Standard "document scanner" pipeline: grayscale → blur → Canny → dilate →
-    findContours → approxPolyDP → 4-point perspective warp.
-    """
-    if img_bgr is None or img_bgr.size == 0:
-        return None
-    h, w = img_bgr.shape[:2]
-    # Downscale for contour detection (faster, less noise).
-    target = 800
-    ratio = target / max(h, w) if max(h, w) > target else 1.0
-    if ratio < 1.0:
-        proc = cv2.resize(img_bgr, (int(w * ratio), int(h * ratio)))
-    else:
-        proc = img_bgr.copy()
-
+def _try_find_card_quad(proc: np.ndarray, canny_lo: int, canny_hi: int, min_area_pct: float) -> Optional[np.ndarray]:
+    """One pass of Canny → contours → 4-point approx. Returns the quad or None."""
     gray = cv2.cvtColor(proc, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(gray, 50, 150)
+    edges = cv2.Canny(gray, canny_lo, canny_hi)
     edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
-
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
         return None
     contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
-
-    proc_area = proc.shape[0] * proc.shape[1]
-    card_quad = None
+    min_area = proc.shape[0] * proc.shape[1] * min_area_pct
     for c in contours:
-        area = cv2.contourArea(c)
-        if area < proc_area * 0.12:    # ignore small junk
+        if cv2.contourArea(c) < min_area:
             continue
         peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-        if len(approx) == 4 and cv2.isContourConvex(approx):
-            card_quad = approx.reshape(4, 2).astype("float32")
+        # try a few epsilon levels — real photos rarely give a clean 4-point poly
+        for eps in (0.02, 0.03, 0.04, 0.05):
+            approx = cv2.approxPolyDP(c, eps * peri, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                return approx.reshape(4, 2).astype("float32")
+    return None
+
+
+def _center_crop_to_card_aspect(img: np.ndarray) -> np.ndarray:
+    """
+    Last-resort fallback: crop the photo to a Pokémon-card aspect ratio
+    (63mm × 88mm ≈ 0.716) around the centre. Matches the on-screen framing
+    brackets so the card (which the user aligned inside the frame) is
+    preserved and ~70%+ of the background is removed.
+    """
+    h, w = img.shape[:2]
+    target_ar = 63.0 / 88.0       # width / height (portrait)
+    # Crop a centred rectangle that covers the framing area (~78% wide × 52% tall).
+    crop_w = int(w * 0.80)
+    crop_h = int(crop_w / target_ar)
+    if crop_h > h * 0.95:
+        crop_h = int(h * 0.92)
+        crop_w = int(crop_h * target_ar)
+    x = (w - crop_w) // 2
+    y = (h - crop_h) // 2
+    return img[y:y + crop_h, x:x + crop_w]
+
+
+def crop_card_from_photo(img_bgr: np.ndarray) -> tuple[Optional[np.ndarray], bool]:
+    """
+    Find the largest convex quadrilateral in the photo (assumed to be the
+    Pokémon card) and return a deskewed crop of it.
+
+    Returns (image, detected). `detected=True` means an actual card outline
+    was found; `detected=False` means we fell back to a card-aspect center
+    crop. Either way the returned image NEVER includes the full background.
+    """
+    if img_bgr is None or img_bgr.size == 0:
+        return None, False
+    h, w = img_bgr.shape[:2]
+    target = 800
+    ratio = target / max(h, w) if max(h, w) > target else 1.0
+    proc = cv2.resize(img_bgr, (int(w * ratio), int(h * ratio))) if ratio < 1.0 else img_bgr.copy()
+
+    # Try a few parameter sets — phone photos have wildly different lighting.
+    quad = None
+    for canny_lo, canny_hi, min_area_pct in [
+        (50, 150, 0.12),
+        (30, 100, 0.10),
+        (75, 200, 0.08),
+    ]:
+        quad = _try_find_card_quad(proc, canny_lo, canny_hi, min_area_pct)
+        if quad is not None:
             break
 
-    if card_quad is None:
-        return None
+    if quad is None:
+        # Soft fallback: center-crop to card aspect ratio (always returns).
+        return _center_crop_to_card_aspect(img_bgr), False
 
-    # Scale points back to original image coordinates.
-    card_quad = card_quad / ratio
+    # Scale points back to original image coordinates and warp.
+    card_quad = quad / ratio
     rect = _order_points(card_quad)
     (tl, tr, br, bl) = rect
-
     width_a = np.linalg.norm(br - bl)
     width_b = np.linalg.norm(tr - tl)
     max_w = int(max(width_a, width_b))
@@ -212,7 +240,7 @@ def crop_card_from_photo(img_bgr: np.ndarray) -> Optional[np.ndarray]:
     height_b = np.linalg.norm(tl - bl)
     max_h = int(max(height_a, height_b))
     if max_w < 40 or max_h < 40:
-        return None
+        return _center_crop_to_card_aspect(img_bgr), False
 
     dst = np.array(
         [[0, 0], [max_w - 1, 0], [max_w - 1, max_h - 1], [0, max_h - 1]],
@@ -220,12 +248,9 @@ def crop_card_from_photo(img_bgr: np.ndarray) -> Optional[np.ndarray]:
     )
     M = cv2.getPerspectiveTransform(rect, dst)
     warped = cv2.warpPerspective(img_bgr, M, (max_w, max_h))
-
-    # Pokémon cards are taller than wide — if we got a landscape crop,
-    # rotate 90° so the result is always portrait.
     if warped.shape[1] > warped.shape[0]:
         warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
-    return warped
+    return warped, True
 
 
 def _b64_to_bgr(b64_data: str) -> Optional[np.ndarray]:
@@ -279,13 +304,13 @@ async def scan_analyze(payload: ScanAnalyzeRequest):
     vision_b64 = img_b64
     img_bgr = _b64_to_bgr(img_b64)
     if img_bgr is not None:
-        warped = crop_card_from_photo(img_bgr)
+        warped, detected = crop_card_from_photo(img_bgr)
         if warped is not None:
             cropped_data_uri = _bgr_to_jpeg_data_uri(warped, max_width=720)
             if cropped_data_uri:
-                crop_detected = True
-                # Send only the cleaned crop to Gemini — much higher signal,
-                # the background no longer competes with the card art.
+                crop_detected = detected   # True = real card contour, False = center-crop fallback
+                # Always send the cropped/center-cropped version to Gemini —
+                # the table/background never reaches the vision model.
                 vision_b64 = cropped_data_uri.split(",", 1)[-1]
 
     system_msg = (
