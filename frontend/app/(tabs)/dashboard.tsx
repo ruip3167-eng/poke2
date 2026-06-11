@@ -1,12 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl,
+  View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
+  RefreshControl, TextInput, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 
 import { api, CardRecord } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
@@ -14,12 +14,42 @@ import { auth as fbAuth, fbSignOut } from '@/src/firebase';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { formatPrice } from '@/src/grading';
 
+type FilterKey = 'recent' | 'value' | 'Mint' | 'Near Mint' | 'Lightly Played' | 'Played' | 'Poor';
+
+interface FilterChip {
+  key: FilterKey;
+  label: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+}
+
+const FILTERS: FilterChip[] = [
+  { key: 'recent', label: 'Mais Recentes', icon: 'time-outline' },
+  { key: 'value',  label: 'Maior Valor',   icon: 'trending-up-outline' },
+  { key: 'Mint',          label: 'Mint' },
+  { key: 'Near Mint',     label: 'Near Mint' },
+  { key: 'Lightly Played', label: 'Lightly Played' },
+  { key: 'Played',        label: 'Played' },
+  { key: 'Poor',          label: 'Poor' },
+];
+
+// Grade → colour ramp (green → red).
+const GRADE_COLORS: Record<string, string> = {
+  'Mint':            '#22C55E',
+  'Near Mint':       '#84CC16',
+  'Lightly Played':  '#F59E0B',
+  'Played':          '#FB923C',
+  'Poor':            '#EF4444',
+};
+const GRADE_ORDER = ['Mint', 'Near Mint', 'Lightly Played', 'Played', 'Poor'];
+
 export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [cards, setCards] = useState<CardRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<FilterKey>('recent');
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -35,38 +65,53 @@ export default function DashboardScreen() {
   }, [user]);
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
-
   const onRefresh = () => { setRefreshing(true); load(); };
 
-  const total = cards.reduce((s, c) => s + (c.estimated_value || 0), 0);
+  const total = useMemo(
+    () => cards.reduce((s, c) => s + (c.estimated_value || 0), 0),
+    [cards],
+  );
+
+  // Grade distribution for the condition chart.
+  const distribution = useMemo(() => {
+    const counts: Record<string, number> = {};
+    cards.forEach((c) => { counts[c.condition_grade] = (counts[c.condition_grade] ?? 0) + 1; });
+    return GRADE_ORDER
+      .map((g) => ({ grade: g, count: counts[g] ?? 0 }))
+      .filter((d) => d.count > 0);
+  }, [cards]);
+
+  // Filtered + sorted view.
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let rows = cards;
+    if (q) {
+      rows = rows.filter((c) =>
+        c.name.toLowerCase().includes(q) || (c.set_name ?? '').toLowerCase().includes(q),
+      );
+    }
+    if (filter !== 'recent' && filter !== 'value') {
+      rows = rows.filter((c) => c.condition_grade === filter);
+    }
+    rows = [...rows];
+    if (filter === 'value') {
+      rows.sort((a, b) => (b.estimated_value || 0) - (a.estimated_value || 0));
+    } else {
+      // 'recent' or condition filter → sort by created_at desc
+      rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    }
+    return rows;
+  }, [cards, query, filter]);
 
   const logout = async () => {
     await fbSignOut(fbAuth);
     router.replace('/(auth)/login');
   };
 
-  const renderEmpty = () => (
-    <View style={styles.empty} testID="portfolio-empty">
-      <View style={styles.emptyIcon}>
-        <Ionicons name="albums-outline" size={48} color={COLORS.brand} />
-      </View>
-      <Text style={styles.emptyTitle}>Your portfolio is empty</Text>
-      <Text style={styles.emptySub}>Scan your first Pokémon card to start tracking its market value.</Text>
-      <Pressable
-        testID="empty-scan-cta"
-        style={styles.emptyCta}
-        onPress={() => router.push('/(tabs)/scan')}
-      >
-        <Ionicons name="scan-outline" size={18} color={COLORS.onBrand} />
-        <Text style={styles.emptyCtaText}>Scan Card</Text>
-      </Pressable>
-    </View>
-  );
-
-  const renderItem = ({ item }: { item: CardRecord }) => (
+  const renderRow = ({ item }: { item: CardRecord }) => (
     <Pressable
       testID={`portfolio-card-${item.id}`}
-      style={styles.card}
+      style={styles.row}
       onPress={() => router.push({
         pathname: '/card-detail',
         params: {
@@ -78,41 +123,67 @@ export default function DashboardScreen() {
         },
       })}
     >
-      <View style={styles.cardImgWrap}>
+      <View style={styles.rowImgWrap}>
         {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.cardImg} contentFit="cover" />
+          <Image source={{ uri: item.image_url }} style={styles.rowImg} contentFit="cover" />
         ) : (
-          <View style={[styles.cardImg, styles.cardImgPlaceholder]}>
-            <Ionicons name="image-outline" size={28} color={COLORS.onSurfaceTertiary} />
+          <View style={[styles.rowImg, styles.rowImgPlaceholder]}>
+            <Ionicons name="image-outline" size={20} color={COLORS.onSurfaceTertiary} />
           </View>
         )}
       </View>
-      <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
-      <Text style={styles.cardSet} numberOfLines={1}>{item.set_name || 'Unknown set'}</Text>
-      <View style={styles.priceRow}>
-        <Text style={styles.cardPrice}>{formatPrice(item.estimated_value)}</Text>
-        <View style={styles.gradePill}>
-          <Text style={styles.gradePillText}>{item.condition_grade}</Text>
+      <View style={styles.rowInfo}>
+        <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.rowSet} numberOfLines={1}>{item.set_name || 'Coleção desconhecida'}</Text>
+        <View style={styles.gradeChip}>
+          <View style={[styles.gradeDot, { backgroundColor: GRADE_COLORS[item.condition_grade] ?? COLORS.onSurfaceTertiary }]} />
+          <Text style={styles.gradeChipText}>{item.condition_grade}</Text>
         </View>
       </View>
+      <Text style={styles.rowPrice}>{formatPrice(item.estimated_value)}</Text>
     </Pressable>
+  );
+
+  const renderEmpty = () => (
+    <View style={styles.empty} testID="portfolio-empty">
+      <View style={styles.emptyIcon}>
+        <Ionicons name="albums-outline" size={48} color={COLORS.brand} />
+      </View>
+      <Text style={styles.emptyTitle}>
+        {cards.length === 0 ? 'A tua coleção está vazia' : 'Sem resultados'}
+      </Text>
+      <Text style={styles.emptySub}>
+        {cards.length === 0
+          ? 'Faz scan da tua primeira carta para começar a acompanhar o valor de mercado.'
+          : 'Tenta ajustar a pesquisa ou os filtros.'}
+      </Text>
+      {cards.length === 0 && (
+        <Pressable
+          testID="empty-scan-cta"
+          style={styles.emptyCta}
+          onPress={() => router.push('/(tabs)/scan')}
+        >
+          <Ionicons name="scan-outline" size={18} color={COLORS.onBrand} />
+          <Text style={styles.emptyCtaText}>Scan Card</Text>
+        </Pressable>
+      )}
+    </View>
   );
 
   return (
     <SafeAreaView style={styles.root} edges={['top']} testID="dashboard-screen">
       <FlatList
-        data={cards}
+        data={visible}
         keyExtractor={(c) => c.id}
-        renderItem={renderItem}
-        numColumns={2}
+        renderItem={renderRow}
         contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: 120 }}
-        columnWrapperStyle={{ gap: SPACING.md, justifyContent: 'space-between' }}
         ItemSeparatorComponent={() => <View style={{ height: SPACING.md }} />}
         ListHeaderComponent={
           <View>
+            {/* Header */}
             <View style={styles.headerRow}>
               <View>
-                <Text style={styles.greeting}>Welcome back</Text>
+                <Text style={styles.greeting}>Olá de volta</Text>
                 <Text style={styles.email} numberOfLines={1}>{user?.email}</Text>
               </View>
               <Pressable onPress={logout} testID="logout-btn" style={styles.iconBtn}>
@@ -120,20 +191,101 @@ export default function DashboardScreen() {
               </Pressable>
             </View>
 
-            <LinearGradient
-              colors={['rgba(255,230,0,0.18)', 'rgba(255,230,0,0.02)']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.totalCard}
-            >
-              <Text style={styles.totalLabel}>Total portfolio value</Text>
+            {/* Total value card */}
+            <View style={styles.totalCard}>
+              <Text style={styles.totalLabel}>Valor Total da Coleção</Text>
               <Text style={styles.totalValue} testID="portfolio-total">{formatPrice(total)}</Text>
               <View style={styles.totalMeta}>
                 <Ionicons name="layers-outline" size={14} color={COLORS.onSurfaceTertiary} />
-                <Text style={styles.totalMetaText}>{cards.length} card{cards.length === 1 ? '' : 's'} saved</Text>
+                <Text style={styles.totalMetaText}>
+                  {cards.length} {cards.length === 1 ? 'carta guardada' : 'cartas guardadas'}
+                </Text>
               </View>
-            </LinearGradient>
+            </View>
 
-            <Text style={styles.sectionTitle}>Collection</Text>
+            {/* Condition analysis */}
+            {cards.length > 0 && (
+              <View style={styles.analysisBlock} testID="condition-analysis">
+                <Text style={styles.section}>Análise do Estado (Raw)</Text>
+                <View style={styles.distBar}>
+                  {distribution.map((d) => {
+                    const pct = (d.count / cards.length) * 100;
+                    return (
+                      <View
+                        key={d.grade}
+                        style={{
+                          width: `${pct}%`,
+                          backgroundColor: GRADE_COLORS[d.grade],
+                        }}
+                      />
+                    );
+                  })}
+                </View>
+                <View style={styles.legend}>
+                  {distribution.map((d) => (
+                    <View key={d.grade} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: GRADE_COLORS[d.grade] }]} />
+                      <Text style={styles.legendLabel}>{d.grade}</Text>
+                      <Text style={styles.legendPct}>
+                        {Math.round((d.count / cards.length) * 100)}%
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Collection header + search */}
+            <Text style={styles.section}>Coleção</Text>
+
+            <View style={styles.searchWrap}>
+              <Ionicons name="search-outline" size={18} color={COLORS.onSurfaceTertiary} />
+              <TextInput
+                testID="search-input"
+                placeholder="Procurar Pokémon ou coleção…"
+                placeholderTextColor={COLORS.onSurfaceTertiary}
+                value={query}
+                onChangeText={setQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.searchInput}
+              />
+              {query.length > 0 && (
+                <Pressable onPress={() => setQuery('')} testID="search-clear" hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color={COLORS.onSurfaceTertiary} />
+                </Pressable>
+              )}
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.chipRow}
+              contentContainerStyle={styles.chipRowContent}
+            >
+              {FILTERS.map((f) => {
+                const active = filter === f.key;
+                return (
+                  <Pressable
+                    key={f.key}
+                    testID={`filter-${f.key}`}
+                    onPress={() => setFilter(f.key)}
+                    style={[styles.chip, active && styles.chipActive]}
+                  >
+                    {f.icon && (
+                      <Ionicons
+                        name={f.icon}
+                        size={14}
+                        color={active ? COLORS.brand : COLORS.onSurfaceTertiary}
+                      />
+                    )}
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {f.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
         }
         ListEmptyComponent={!loading ? renderEmpty : null}
@@ -150,34 +302,147 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.surface },
+
+  // Header
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: SPACING.md, paddingBottom: SPACING.lg },
   greeting: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
   email: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '700', marginTop: 2, maxWidth: 260 },
   iconBtn: { width: 40, height: 40, borderRadius: RADII.pill, backgroundColor: COLORS.surfaceTertiary, alignItems: 'center', justifyContent: 'center' },
+
+  // Total card
   totalCard: {
-    borderRadius: RADII.lg, padding: SPACING.xl, borderWidth: 1, borderColor: 'rgba(255,230,0,0.25)',
-    marginBottom: SPACING.xl,
+    backgroundColor: COLORS.surfaceTertiary,
+    borderRadius: RADII.md,
+    padding: SPACING.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.lg,
   },
-  totalLabel: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
-  totalValue: { color: COLORS.onSurface, fontSize: TYPE.mega, fontWeight: '900', letterSpacing: -1, marginTop: SPACING.sm },
+  totalLabel: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  totalValue: {
+    color: COLORS.brand,
+    fontSize: 52,
+    fontWeight: '900',
+    letterSpacing: -1.2,
+    marginTop: SPACING.sm,
+    textShadowColor: 'rgba(255,230,0,0.35)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
+  },
   totalMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: SPACING.sm },
   totalMetaText: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, fontWeight: '500' },
-  sectionTitle: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '700', marginBottom: SPACING.md },
-  card: { flex: 1, backgroundColor: COLORS.surfaceSecondary, borderRadius: RADII.md, padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, maxWidth: '49%' },
-  cardImgWrap: { aspectRatio: 0.72, borderRadius: RADII.sm, overflow: 'hidden', marginBottom: SPACING.sm, backgroundColor: COLORS.surfaceTertiary },
-  cardImg: { width: '100%', height: '100%' },
-  cardImgPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  cardName: { color: COLORS.onSurface, fontSize: TYPE.base, fontWeight: '700' },
-  cardSet: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, marginTop: 2 },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: SPACING.sm },
-  cardPrice: { color: COLORS.brand, fontSize: TYPE.lg, fontWeight: '800', letterSpacing: -0.3 },
-  gradePill: { backgroundColor: COLORS.surfaceTertiary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADII.pill },
-  gradePillText: { color: COLORS.onSurfaceSecondary, fontSize: 10, fontWeight: '700' },
+
+  // Analysis
+  analysisBlock: { marginBottom: SPACING.xl },
+  distBar: {
+    flexDirection: 'row',
+    height: 14,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surfaceSecondary,
+    marginBottom: SPACING.md,
+  },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md, rowGap: SPACING.sm },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 10, height: 10, borderRadius: 999 },
+  legendLabel: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, fontWeight: '600' },
+  legendPct: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, fontWeight: '700', marginLeft: 2 },
+
+  // Section
+  section: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '700', marginBottom: SPACING.md },
+
+  // Search
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    height: 48,
+    marginBottom: SPACING.md,
+  },
+  searchInput: {
+    flex: 1,
+    color: COLORS.onSurface,
+    fontSize: TYPE.base,
+    paddingVertical: 0,
+  },
+
+  // Chip row (horizontal scroll, never wraps)
+  chipRow: { height: 56, marginBottom: SPACING.md },
+  chipRowContent: { gap: SPACING.sm, paddingVertical: SPACING.sm, paddingRight: SPACING.lg },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+    height: 36,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADII.pill,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  chipActive: {
+    backgroundColor: 'transparent',
+    borderColor: COLORS.brand,
+  },
+  chipText: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, fontWeight: '700' },
+  chipTextActive: { color: COLORS.brand },
+
+  // Card rows (list, not grid)
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+  },
+  rowImgWrap: {
+    width: 56,
+    height: 78,
+    borderRadius: RADII.sm,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surfaceTertiary,
+  },
+  rowImg: { width: '100%', height: '100%' },
+  rowImgPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  rowInfo: { flex: 1, gap: 2 },
+  rowName: { color: COLORS.onSurface, fontSize: TYPE.base, fontWeight: '700' },
+  rowSet: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, marginTop: 1 },
+  gradeChip: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADII.pill,
+    marginTop: 4,
+  },
+  gradeDot: { width: 6, height: 6, borderRadius: 999 },
+  gradeChipText: { color: COLORS.onSurfaceSecondary, fontSize: 10, fontWeight: '700' },
+  rowPrice: {
+    color: COLORS.brand,
+    fontSize: TYPE.lg,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+
+  // Empty
   empty: { alignItems: 'center', paddingHorizontal: SPACING.xl, paddingTop: SPACING.xxl },
   emptyIcon: { width: 88, height: 88, borderRadius: RADII.pill, backgroundColor: COLORS.brandSoft, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.lg },
   emptyTitle: { color: COLORS.onSurface, fontSize: TYPE.xl, fontWeight: '800', marginBottom: SPACING.xs },
   emptySub: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.base, textAlign: 'center', lineHeight: 20, marginBottom: SPACING.xl },
   emptyCta: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: COLORS.brand, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: RADII.pill },
   emptyCtaText: { color: COLORS.onBrand, fontWeight: '800', fontSize: TYPE.base },
+
   loader: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
 });
