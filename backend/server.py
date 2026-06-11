@@ -453,11 +453,17 @@ async def delete_card(card_id: str):
     return {"deleted": res.deleted_count}
 
 
+# Server-authoritative free-tier limit. Override existing user records too
+# (some may have been created when the limit was higher).
+FREE_SCAN_LIMIT = 5
+
+
 @api.get("/scan/count/{user_id}", response_model=ScanCount)
 async def get_scan_count(user_id: str):
     doc = await db.scan_counters.find_one({"user_id": user_id}, {"_id": 0})
     if not doc:
-        return ScanCount(user_id=user_id, count=0)
+        return ScanCount(user_id=user_id, count=0, free_limit=FREE_SCAN_LIMIT)
+    doc["free_limit"] = FREE_SCAN_LIMIT
     return ScanCount(**doc)
 
 
@@ -465,13 +471,14 @@ async def get_scan_count(user_id: str):
 async def increment_scan_count(user_id: str):
     doc = await db.scan_counters.find_one_and_update(
         {"user_id": user_id},
-        {"$inc": {"count": 1}, "$setOnInsert": {"free_limit": 10, "is_pro": False}},
+        {"$inc": {"count": 1}, "$set": {"free_limit": FREE_SCAN_LIMIT}, "$setOnInsert": {"is_pro": False}},
         upsert=True,
         return_document=True,
         projection={"_id": 0},
     )
     if not doc:
-        doc = {"user_id": user_id, "count": 1, "free_limit": 10, "is_pro": False}
+        doc = {"user_id": user_id, "count": 1, "free_limit": FREE_SCAN_LIMIT, "is_pro": False}
+    doc["free_limit"] = FREE_SCAN_LIMIT
     return ScanCount(**doc)
 
 
@@ -480,10 +487,11 @@ async def upgrade_to_pro(user_id: str):
     """Mock upgrade — flips is_pro to True (no real billing)."""
     await db.scan_counters.update_one(
         {"user_id": user_id},
-        {"$set": {"is_pro": True}, "$setOnInsert": {"count": 0, "free_limit": 10}},
+        {"$set": {"is_pro": True, "free_limit": FREE_SCAN_LIMIT}, "$setOnInsert": {"count": 0}},
         upsert=True,
     )
     doc = await db.scan_counters.find_one({"user_id": user_id}, {"_id": 0})
+    doc["free_limit"] = FREE_SCAN_LIMIT
     return ScanCount(**doc)
 
 
