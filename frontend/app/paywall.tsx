@@ -12,6 +12,34 @@ import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 
+type PlanKey = 'monthly' | 'yearly';
+
+interface Plan {
+  key: PlanKey;
+  label: string;
+  price: string;
+  unit: string;
+  perMonth?: string;
+  savePct?: string;
+}
+
+const PLANS: Record<PlanKey, Plan> = {
+  monthly: {
+    key: 'monthly',
+    label: 'Plano Mensal',
+    price: '3,99 €',
+    unit: '/ mês',
+  },
+  yearly: {
+    key: 'yearly',
+    label: 'Plano Anual',
+    price: '27,99 €',
+    unit: '/ ano',
+    perMonth: 'Apenas 2,33 € por mês',
+    savePct: 'POUPA 41%',
+  },
+};
+
 const BENEFITS = [
   'Scans de IA e avaliações de estado ilimitados',
   'Histórico completo e gráficos de evolução do valor do teu Portfólio',
@@ -21,8 +49,16 @@ const BENEFITS = [
 export default function PaywallScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  // Yearly selected by default — drives conversion to the higher-LTV plan.
+  const [selected, setSelected] = useState<PlanKey>('yearly');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const pickPlan = (k: PlanKey) => {
+    if (k === selected) return;
+    Haptics.selectionAsync().catch(() => {});
+    setSelected(k);
+  };
 
   const subscribe = async () => {
     if (!user || loading) return;
@@ -30,7 +66,7 @@ export default function PaywallScreen() {
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     try {
-      // MOCKED purchase — flips is_pro=true on the server.
+      // MOCKED purchase — flips is_pro=true on the server regardless of plan.
       await api.upgrade(user.uid);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       router.replace('/(tabs)/dashboard');
@@ -43,8 +79,6 @@ export default function PaywallScreen() {
 
   const restore = async () => {
     if (!user) return;
-    // Mock "restaurar compras" — if user previously upgraded, this will surface
-    // the existing is_pro flag and send them back to the dashboard.
     try {
       const c = await api.getScanCount(user.uid);
       if (c.is_pro) {
@@ -55,6 +89,38 @@ export default function PaywallScreen() {
     } catch {
       setErr('Não foi possível verificar compras anteriores.');
     }
+  };
+
+  const renderPlan = (k: PlanKey) => {
+    const p = PLANS[k];
+    const isSelected = selected === k;
+    return (
+      <Pressable
+        key={k}
+        testID={`paywall-plan-${k}`}
+        onPress={() => pickPlan(k)}
+        style={[styles.planCard, isSelected && styles.planCardActive]}
+      >
+        {p.savePct && (
+          <View style={styles.saveBadge}>
+            <Text style={styles.saveBadgeText}>{p.savePct}</Text>
+          </View>
+        )}
+        <View style={styles.planHeader}>
+          <Text style={styles.planLabel}>{p.label}</Text>
+          <View style={[styles.radio, isSelected && styles.radioActive]}>
+            {isSelected && <View style={styles.radioDot} />}
+          </View>
+        </View>
+        <View style={styles.priceRow}>
+          <Text style={[styles.priceValue, isSelected && styles.priceValueActive]}>
+            {p.price}
+          </Text>
+          <Text style={styles.priceUnit}>{p.unit}</Text>
+        </View>
+        {p.perMonth && <Text style={styles.priceSub}>{p.perMonth}</Text>}
+      </Pressable>
+    );
   };
 
   return (
@@ -94,20 +160,12 @@ export default function PaywallScreen() {
           ))}
         </View>
 
-        <View style={styles.priceCard} testID="paywall-price-card">
-          <View style={styles.priceBadge}>
-            <Text style={styles.priceBadgeText}>PRO MENSAL</Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceValue}>3,99 €</Text>
-            <Text style={styles.priceUnit}>/ mês</Text>
-          </View>
-          <Text style={styles.priceSub}>Cancela quando quiseres · Sem compromisso</Text>
+        <View style={styles.plans} testID="paywall-plan-selector">
+          {renderPlan('yearly')}
+          {renderPlan('monthly')}
         </View>
 
-        {err && (
-          <Text style={styles.error} testID="paywall-error">{err}</Text>
-        )}
+        {err && <Text style={styles.error} testID="paywall-error">{err}</Text>}
 
         <Pressable
           testID="paywall-subscribe-button"
@@ -120,11 +178,7 @@ export default function PaywallScreen() {
             : <Text style={styles.ctaText}>Subscrever Agora</Text>}
         </Pressable>
 
-        <Pressable
-          onPress={restore}
-          style={styles.linkBtn}
-          testID="paywall-restore-button"
-        >
+        <Pressable onPress={restore} style={styles.linkBtn} testID="paywall-restore-button">
           <Text style={styles.linkText}>Restaurar Compras</Text>
         </Pressable>
 
@@ -148,6 +202,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.surface },
   glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 400 },
   scroll: { padding: SPACING.xl, paddingBottom: SPACING.xxxl },
+
   close: {
     alignSelf: 'flex-end',
     width: 40, height: 40, borderRadius: RADII.pill,
@@ -164,16 +219,14 @@ const styles = StyleSheet.create({
   },
   title: {
     color: COLORS.onSurface,
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '900',
     letterSpacing: -0.5,
-    lineHeight: 38,
+    lineHeight: 36,
     marginBottom: SPACING.xl,
   },
-  benefits: {
-    gap: SPACING.md,
-    marginBottom: SPACING.xl,
-  },
+
+  benefits: { gap: SPACING.md, marginBottom: SPACING.xl },
   benefitRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -197,52 +250,86 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '500',
   },
-  priceCard: {
+
+  // Plans
+  plans: { gap: SPACING.md, marginBottom: SPACING.lg },
+  planCard: {
     backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADII.md,
     borderWidth: 2,
-    borderColor: COLORS.brand,
-    padding: SPACING.xl,
-    marginBottom: SPACING.lg,
-    alignItems: 'center',
+    borderColor: COLORS.border,
+    padding: SPACING.lg,
+    position: 'relative',
   },
-  priceBadge: {
+  planCardActive: {
+    borderColor: COLORS.brand,
+    backgroundColor: 'rgba(255,230,0,0.06)',
+  },
+  saveBadge: {
+    position: 'absolute',
+    top: -10,
+    right: 16,
     backgroundColor: COLORS.brand,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: RADII.pill,
-    marginBottom: SPACING.md,
+    shadowColor: COLORS.brand,
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
   },
-  priceBadgeText: {
+  saveBadgeText: {
     color: COLORS.onBrand,
     fontWeight: '900',
-    fontSize: 10,
-    letterSpacing: 1.2,
+    fontSize: 11,
+    letterSpacing: 0.8,
   },
-  priceRow: {
+  planHeader: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
   },
+  planLabel: {
+    color: COLORS.onSurfaceSecondary,
+    fontWeight: '700',
+    fontSize: TYPE.base,
+    letterSpacing: 0.3,
+  },
+  radio: {
+    width: 22, height: 22, borderRadius: 999,
+    borderWidth: 2,
+    borderColor: COLORS.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioActive: { borderColor: COLORS.brand },
+  radioDot: { width: 10, height: 10, borderRadius: 999, backgroundColor: COLORS.brand },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   priceValue: {
-    color: COLORS.brand,
-    fontSize: 48,
+    color: COLORS.onSurface,
+    fontSize: 32,
     fontWeight: '900',
-    letterSpacing: -1,
-    textShadowColor: 'rgba(255,230,0,0.35)',
+    letterSpacing: -0.8,
+  },
+  priceValueActive: {
+    color: COLORS.brand,
+    textShadowColor: 'rgba(255,230,0,0.4)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
+    textShadowRadius: 14,
   },
   priceUnit: {
     color: COLORS.onSurfaceTertiary,
-    fontSize: TYPE.lg,
+    fontSize: TYPE.base,
     fontWeight: '600',
   },
   priceSub: {
     color: COLORS.onSurfaceTertiary,
     fontSize: TYPE.sm,
-    marginTop: SPACING.sm,
+    marginTop: 6,
+    fontWeight: '600',
   },
+
   error: {
     color: COLORS.error,
     fontSize: TYPE.sm,
@@ -267,20 +354,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.4,
   },
-  linkBtn: {
-    alignItems: 'center',
-    paddingVertical: SPACING.md,
-  },
-  linkText: {
-    color: COLORS.onSurfaceSecondary,
-    fontSize: TYPE.base,
-    fontWeight: '700',
-  },
-  linkTextDim: {
-    color: COLORS.onSurfaceTertiary,
-    fontSize: TYPE.base,
-    fontWeight: '600',
-  },
+  linkBtn: { alignItems: 'center', paddingVertical: SPACING.md },
+  linkText: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.base, fontWeight: '700' },
+  linkTextDim: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.base, fontWeight: '600' },
   disclaimer: {
     color: COLORS.onSurfaceTertiary,
     fontSize: 11,
