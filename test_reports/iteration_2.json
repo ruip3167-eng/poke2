@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only retest. All five previous regressions are fixed: (1) signup.tsx imports useT and creates `const t = useT()`, screen renders cleanly and successfully created Firebase user testuser+pv@example.com / TestPass123! via the UI (login first returned auth/invalid-credential because account didn't exist; signup then succeeded and routed to /(tabs)/dashboard). (2) dashboard.tsx imports useI18n, FILTERS_BASE → FILTERS via useMemo with localized labels, all hardcoded PT strings replaced with t.dashboard.* (greeting, totalLabel, cardsSaved, conditionAnalysis, collection, searchPlaceholder, filterRecent, filterValue, emptyTitle/Sub). (3) New 🇵🇹/🇬🇧 flag pressable [data-testid=locale-toggle] now lives in dashboard header next to logout and successfully flips entire app PT⇄EN; toggle state persists across reload (localStorage 'pv.locale'). (4) scan.tsx mounts without error, styles.frameOutline now defined (thin neon outline visible inside the corner brackets). (5) condition.tsx fully translates in PT — Ajustar Centragem / Cantos / Arestas / Superfície, all subtitles, Cantos Brancos + Riscos na Superfície, ESTADO + VALOR MANTIDO, Calcular valor button, CARTA DETECTADA banner. (6) card-detail.tsx hero shows [data-testid=detail-share] button; tapping on web preview gracefully renders inline banner 'Sharing unavailable on this device.' (EN) / 'Partilha indisponível neste dispositivo.' (PT) — no crash. POOR/MINT labels under retention bar correctly remain literal in both locales by design. Minor non-blocking: tab labels 'Scan' and 'Upgrade' aren't translated (only 'Portfolio'→'Portfólio' flips); previously-known deprecated style warnings (shadow*/textShadow*/pointerEvents) still present.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      { "screen": "(tabs)/_layout", "issues": ["Tab labels for Scan and Upgrade do not translate when locale flips to PT (only Portfolio→Portfólio works). Likely t.tabs.scan / t.tabs.upgrade are either identical to EN in the dictionary or not wired into the tabBarLabel. Cosmetic, not blocking the retest."] }
+    ],
+    "react_native_issues": [
+      { "component": "shadow* / textShadow* / pointerEvents", "issue": "Web preview console still warns 'shadow*' and 'textShadow*' style props are deprecated (use 'boxShadow' / 'textShadow') and 'props.pointerEvents is deprecated, use style.pointerEvents'. Non-blocking, but worth migrating for RN 0.76+. References: total value glow + card row shadows + scan laser shadow." }
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_2.json"],
+  "action_items": [
+    "Optional: translate (tabs)/_layout.tsx tabBarLabel for Scan & Upgrade tabs via t.tabs.* (only Portfolio currently flips).",
+    "Optional cleanup: migrate shadow*/textShadow*/pointerEvents to the new RN web-supported props to silence console warnings."
+  ],
+  "critical_code_review_comments": [
+    "dashboard.tsx: FILTERS useMemo is dependency-correct (recomputes when t.dashboard.filterRecent / filterValue change).",
+    "card-detail.tsx: graceful Platform.OS web fallback for share is correctly gated and shows a localized banner — good UX.",
+    "share-card.tsx: dictionaries[locale] direct reads ensure the captured share image respects the active locale at snapshot time.",
+    "i18n-context.tsx: detectDeviceLocale() correctly defaults non-EN tags (incl. pt-BR/pt-PT, es, fr) to 'pt' per product spec, with saved override via storage."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "skipped", "frontend": "100% on retest items" },
+  "seed_data_creation": "Firebase user testuser+pv@example.com / TestPass123! was created via the signup screen during this run. No backend seed data created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All five regressions from iteration_1 are fixed and verified end-to-end on web preview at https://card-scanner-pro-8.preview.emergentagent.com. The test Firebase account now exists; future runs should hit the login flow directly. Locale toggle persists across reload — verified by reloading dashboard after switching to PT and reading body text. Only outstanding cosmetic items: tab labels for Scan/Upgrade not translated and deprecated RN web style prop warnings.",
+  "rca_of_issue": "All previously reported ReferenceErrors and missing-style bugs were caused by an incomplete i18n second-pass refactor on signup.tsx and dashboard.tsx (imports/symbols not wired, FILTERS rename half-applied, hardcoded PT strings left in place) plus a missing StyleSheet key in scan.tsx. Main agent's fixes in this iteration add the missing imports/hooks, compute a localized FILTERS array from FILTERS_BASE inside the component, render a 🇵🇹/🇬🇧 toggle pressable, replace PT literals with t.dashboard.* keys, and define styles.frameOutline. Confirmed working via Playwright signup→dashboard→toggle→reload→condition→card-detail flow."
+}

@@ -13,14 +13,9 @@ import { useAuth } from '@/src/auth-context';
 import { auth as fbAuth, fbSignOut } from '@/src/firebase';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { formatPrice } from '@/src/grading';
+import { useI18n } from '@/src/i18n-context';
 
 type FilterKey = 'recent' | 'value' | 'Mint' | 'Near Mint' | 'Lightly Played' | 'Played' | 'Poor';
-
-interface FilterChip {
-  key: FilterKey;
-  label: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-}
 
 const FILTERS_BASE: { key: FilterKey; labelKey: 'recent' | 'value' | null; condLabel?: string; icon?: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'recent', labelKey: 'recent', icon: 'time-outline' },
@@ -51,6 +46,22 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterKey>('recent');
+
+  // Localised filter chips. The condition labels stay literal (Mint / Near
+  // Mint / …) because they are TCG grading terms recognized across markets.
+  const FILTERS = useMemo(
+    () =>
+      FILTERS_BASE.map((f) => ({
+        ...f,
+        label:
+          f.labelKey === 'recent'
+            ? t.dashboard.filterRecent
+            : f.labelKey === 'value'
+              ? t.dashboard.filterValue
+              : (f.condLabel as string),
+      })),
+    [t.dashboard.filterRecent, t.dashboard.filterValue],
+  );
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -181,23 +192,33 @@ export default function DashboardScreen() {
           <View>
             {/* Header */}
             <View style={styles.headerRow}>
-              <View>
-                <Text style={styles.greeting}>Olá de volta</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.greeting}>{t.dashboard.greeting}</Text>
                 <Text style={styles.email} numberOfLines={1}>{user?.email}</Text>
               </View>
-              <Pressable onPress={logout} testID="logout-btn" style={styles.iconBtn}>
-                <Ionicons name="log-out-outline" size={20} color={COLORS.onSurfaceSecondary} />
-              </Pressable>
+              <View style={styles.headerActions}>
+                <Pressable
+                  onPress={toggleLocale}
+                  testID="locale-toggle"
+                  style={styles.flagBtn}
+                  accessibilityLabel={locale === 'pt' ? 'Switch to English' : 'Mudar para Português'}
+                >
+                  <Text style={styles.flagEmoji}>{locale === 'pt' ? '🇵🇹' : '🇬🇧'}</Text>
+                </Pressable>
+                <Pressable onPress={logout} testID="logout-btn" style={styles.iconBtn}>
+                  <Ionicons name="log-out-outline" size={20} color={COLORS.onSurfaceSecondary} />
+                </Pressable>
+              </View>
             </View>
 
             {/* Total value card */}
             <View style={styles.totalCard}>
-              <Text style={styles.totalLabel}>Valor Total da Coleção</Text>
+              <Text style={styles.totalLabel}>{t.dashboard.totalLabel}</Text>
               <Text style={styles.totalValue} testID="portfolio-total">{formatPrice(total)}</Text>
               <View style={styles.totalMeta}>
                 <Ionicons name="layers-outline" size={14} color={COLORS.onSurfaceTertiary} />
                 <Text style={styles.totalMetaText}>
-                  {cards.length} {cards.length === 1 ? 'carta guardada' : 'cartas guardadas'}
+                  {t.dashboard.cardsSaved(cards.length)}
                 </Text>
               </View>
             </View>
@@ -205,7 +226,7 @@ export default function DashboardScreen() {
             {/* Condition analysis */}
             {cards.length > 0 && (
               <View style={styles.analysisBlock} testID="condition-analysis">
-                <Text style={styles.section}>Análise do Estado (Raw)</Text>
+                <Text style={styles.section}>{t.dashboard.conditionAnalysis}</Text>
                 <View style={styles.distBar}>
                   {distribution.map((d) => {
                     const pct = (d.count / cards.length) * 100;
@@ -279,7 +300,7 @@ export default function DashboardScreen() {
                       />
                     )}
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {label}
+                      {f.label}
                     </Text>
                   </Pressable>
                 );
@@ -307,6 +328,9 @@ const styles = StyleSheet.create({
   greeting: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
   email: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '700', marginTop: 2, maxWidth: 260 },
   iconBtn: { width: 40, height: 40, borderRadius: RADII.pill, backgroundColor: COLORS.surfaceTertiary, alignItems: 'center', justifyContent: 'center' },
+  headerActions: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' },
+  flagBtn: { width: 40, height: 40, borderRadius: RADII.pill, backgroundColor: COLORS.surfaceTertiary, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border },
+  flagEmoji: { fontSize: 22, lineHeight: 26 },
 
   // Total card
   totalCard: {

@@ -250,6 +250,12 @@ const styles = StyleSheet.create({
     width: FRAME_W as any, height: FRAME_H as any, overflow: 'hidden',
   },
   corner: { position: 'absolute', width: 28, height: 28, borderColor: COLORS.brand },
+  frameOutline: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
+    borderColor: 'rgba(255,230,0,0.35)',
+    borderRadius: 8,
+  },
   cTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 8 },
   cTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 8 },
   cBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 8 },

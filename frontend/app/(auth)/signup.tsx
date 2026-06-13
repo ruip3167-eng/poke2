@@ -9,9 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { auth, createUserWithEmailAndPassword } from '@/src/firebase';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
+import { useT } from '@/src/i18n-context';
 
 export default function SignupScreen() {
   const router = useRouter();
+  const t = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
