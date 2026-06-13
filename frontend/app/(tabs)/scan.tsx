@@ -14,11 +14,13 @@ import { useAuth } from '@/src/auth-context';
 import { useRevenueCat } from '@/src/revenuecat-context';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { scanStore } from '@/src/scan-store';
+import { useT } from '@/src/i18n-context';
 
 export default function ScanScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { isPro: rcIsPro, available: rcAvailable } = useRevenueCat();
+  const t = useT();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [flash, setFlash] = useState(false);
@@ -144,10 +146,10 @@ export default function ScanScreen() {
       <SafeAreaView style={styles.root} testID="scan-permission">
         <View style={styles.permWrap}>
           <View style={styles.permIcon}><Ionicons name="camera-outline" size={48} color={COLORS.brand} /></View>
-          <Text style={styles.permTitle}>Camera access needed</Text>
-          <Text style={styles.permSub}>Allow camera to scan and identify your Pokémon cards.</Text>
+          <Text style={styles.permTitle}>{t.scan.permissionTitle}</Text>
+          <Text style={styles.permSub}>{t.scan.permissionSub}</Text>
           <Pressable style={styles.primaryBtn} onPress={requestPermission} testID="scan-grant-permission">
-            <Text style={styles.primaryBtnText}>Grant permission</Text>
+            <Text style={styles.primaryBtnText}>{t.scan.grantPermission}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -194,7 +196,7 @@ export default function ScanScreen() {
             color={isPro ? COLORS.brand : COLORS.onSurfaceSecondary}
           />
           <Text style={styles.counterText} testID="scan-counter">
-            {isPro ? 'PRO · Unlimited' : (remaining === null ? '—' : `${remaining} free scans left`)}
+            {isPro ? t.scan.proUnlimited : (remaining === null ? '—' : t.scan.freeScansLeft(remaining))}
           </Text>
         </View>
         <Pressable onPress={() => setFlash((f) => !f)} style={styles.iconBtn} testID="scan-flash-toggle">
@@ -202,7 +204,7 @@ export default function ScanScreen() {
         </Pressable>
       </SafeAreaView>
 
-      <Text style={styles.hint} testID="scan-hint">Align the card inside the frame · auto-crop will remove the background</Text>
+      <Text style={styles.hint} testID="scan-hint">{t.scan.alignCard}</Text>
 
       {error && (
         <View style={styles.errorBanner} testID="scan-error">
@@ -231,7 +233,7 @@ export default function ScanScreen() {
               )}
             </View>
           </Pressable>
-          <Text style={styles.shutterLabel}>{scanning ? 'Analyzing…' : 'Tap to scan'}</Text>
+          <Text style={styles.shutterLabel}>{scanning ? t.scan.analyzing : t.scan.tapToScan}</Text>
         </BlurView>
       </SafeAreaView>
     </View>

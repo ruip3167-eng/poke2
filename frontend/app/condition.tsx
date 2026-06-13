@@ -10,6 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { gradeCard, formatPrice, FALLBACK_MARKET_PRICE } from '@/src/grading';
 import { api, type Condition } from '@/src/api';
+import { useT } from '@/src/i18n-context';
 
 const GRADES = [
   { v: 'mint', label: 'Mint' },
@@ -19,15 +20,11 @@ const GRADES = [
   { v: 'poor', label: 'Poor' },
 ] as const;
 
-const ASPECTS: { key: keyof Condition; title: string; sub: string }[] = [
-  { key: 'centering', title: 'Centering', sub: 'How well-aligned is the print?' },
-  { key: 'corners', title: 'Corners', sub: 'Sharp or rounded / frayed?' },
-  { key: 'edges', title: 'Edges', sub: 'Smooth or chipped / nicked?' },
-  { key: 'surface', title: 'Surface', sub: 'Glossy or scuffed?' },
-];
+const ASPECT_KEYS: (keyof Condition)[] = ['centering', 'corners', 'edges', 'surface'];
 
 export default function ConditionScreen() {
   const router = useRouter();
+  const t = useT();
   const params = useLocalSearchParams<{ name: string; set_name?: string; number?: string; scan_id?: string }>();
   const [cond, setCond] = useState<Condition>({
     centering: 'near_mint',
@@ -113,14 +110,14 @@ export default function ConditionScreen() {
         <Pressable onPress={() => router.back()} style={styles.closeBtn} testID="condition-close">
           <Ionicons name="close" size={20} color={COLORS.onSurface} />
         </Pressable>
-        <Text style={styles.headerTitle}>Condition</Text>
+        <Text style={styles.headerTitle}>{t.condition.title}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.banner}>
-          <Text style={styles.bannerLabel}>Detected card</Text>
-          <Text style={styles.bannerName} numberOfLines={2}>{params.name || 'Unknown card'}</Text>
+          <Text style={styles.bannerLabel}>{t.condition.detectedCard}</Text>
+          <Text style={styles.bannerName} numberOfLines={2}>{params.name || t.condition.unknownCard}</Text>
           {(params.set_name || params.number) && (
             <Text style={styles.bannerSub}>
               {[params.set_name, params.number].filter(Boolean).join(' · ')}
@@ -128,20 +125,22 @@ export default function ConditionScreen() {
           )}
         </View>
 
-        {ASPECTS.map((a) => (
-          <View key={a.key} style={styles.row} testID={`aspect-${a.key}`}>
+        {ASPECT_KEYS.map((key) => (
+          <View key={key} style={styles.row} testID={`aspect-${key}`}>
             <View style={{ marginBottom: SPACING.sm }}>
-              <Text style={styles.rowTitle}>{a.title}</Text>
-              <Text style={styles.rowSub}>{a.sub}</Text>
+              <Text style={styles.rowTitle}>{t.condition[key as 'centering' | 'corners' | 'edges' | 'surface']}</Text>
+              <Text style={styles.rowSub}>
+                {t.condition[`${key}Sub` as 'centeringSub' | 'cornersSub' | 'edgesSub' | 'surfaceSub']}
+              </Text>
             </View>
             <View style={styles.segment}>
               {GRADES.map((g) => {
-                const selected = (cond[a.key] as string) === g.v;
+                const selected = (cond[key] as string) === g.v;
                 return (
                   <Pressable
                     key={g.v}
-                    testID={`aspect-${a.key}-${g.v}`}
-                    onPress={() => setAspect(a.key, g.v)}
+                    testID={`aspect-${key}-${g.v}`}
+                    onPress={() => setAspect(key, g.v)}
                     style={[styles.segItem, selected && styles.segItemActive]}
                   >
                     <Text style={[styles.segText, selected && styles.segTextActive]}>{g.label}</Text>
@@ -154,8 +153,8 @@ export default function ConditionScreen() {
 
         <View style={styles.toggleRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle}>Edge whitening</Text>
-            <Text style={styles.rowSub}>Visible white wear along borders</Text>
+            <Text style={styles.rowTitle}>{t.condition.whitening}</Text>
+            <Text style={styles.rowSub}>{t.condition.whiteningSub}</Text>
           </View>
           <Switch
             testID="toggle-whitening"
@@ -168,8 +167,8 @@ export default function ConditionScreen() {
 
         <View style={styles.toggleRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle}>Surface scratches</Text>
-            <Text style={styles.rowSub}>Scratches or scuffs on the face</Text>
+            <Text style={styles.rowTitle}>{t.condition.scratches}</Text>
+            <Text style={styles.rowSub}>{t.condition.scratchesSub}</Text>
           </View>
           <Switch
             testID="toggle-scratches"
@@ -182,11 +181,11 @@ export default function ConditionScreen() {
 
         <View style={styles.summary}>
           <View>
-            <Text style={styles.summaryLabel}>Grade</Text>
+            <Text style={styles.summaryLabel}>{t.condition.grade}</Text>
             <Text style={styles.summaryGrade} testID="summary-grade">{grade}</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.summaryLabel}>Value retained</Text>
+            <Text style={styles.summaryLabel}>{t.condition.valueRetained}</Text>
             <Text style={styles.summaryValue}>{Math.round(multiplier * 100)}%</Text>
           </View>
         </View>
@@ -201,7 +200,7 @@ export default function ConditionScreen() {
         >
           {loading
             ? <ActivityIndicator color={COLORS.onBrand} />
-            : <Text style={styles.ctaText}>Calculate value</Text>}
+            : <Text style={styles.ctaText}>{t.condition.calculate}</Text>}
         </Pressable>
       </SafeAreaView>
     </SafeAreaView>

@@ -101,3 +101,105 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  PokeValue Scanner — Pokémon TCG scanner mobile app with AI vision, market pricing,
+  condition assessment, freemium paywall. Premium dark theme + neon yellow accents.
+  Bilingual PT/EN. Latest user request: finalize i18n translations on remaining
+  screens AND add a Share Card feature (capture the graded card as a polished image
+  and open native share sheet so collectors can share their grades on Instagram/
+  WhatsApp/Discord).
+
+frontend:
+  - task: "Complete i18n translations on condition.tsx (Centering / Corners / Edges / Surface aspects, header title, banner labels, CTA)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/condition.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Replaced static EN ASPECTS array with ASPECT_KEYS that read from t.condition.{key} / t.condition.{key}Sub. Header now uses t.condition.title, banner uses t.condition.detectedCard/unknownCard, CTA uses t.condition.calculate."
+
+  - task: "Add I18nProvider to root _layout.tsx (was missing import, app crashed at boot)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/_layout.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added missing `import { I18nProvider } from '@/src/i18n-context';` to fix `ReferenceError: I18nProvider is not defined` at RootLayout."
+
+  - task: "Translate remaining strings in card-detail.tsx (Poor / Mint labels, No live market message) and switch to useI18n() to expose locale"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/card-detail.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Switched from useT() to useI18n() to access locale for ShareCard. Replaced hardcoded Poor/Mint with t.detail.poor / t.detail.mint and noLiveData with t.detail.noLiveData."
+
+  - task: "Share Card feature (off-screen ViewShot + react-native-view-shot + expo-sharing)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/share-card.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Added a new <ShareCard /> composer that renders an off-screen branded
+            social card (card art + grade + value retained + estimated price +
+            POKEVALUE SCANNER footer). On the Card Detail screen, a new share-social
+            icon button in the hero top bar snapshots the composer via captureRef and
+            opens native share sheet via expo-sharing.shareAsync. Falls back gracefully
+            on web (sharing unavailable banner). Translations under t.share.* in PT/EN.
+
+backend:
+  - task: "No backend changes in this session"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Untouched. Backend continues to serve scan/analyze, scan/count, portfolio, price endpoints."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Complete i18n translations on condition.tsx (Centering / Corners / Edges / Surface aspects, header title, banner labels, CTA)"
+    - "Add I18nProvider to root _layout.tsx (was missing import, app crashed at boot)"
+    - "Share Card feature (off-screen ViewShot + react-native-view-shot + expo-sharing)"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: |
+        Implemented two changes:
+        1) Finished i18n second pass: condition.tsx is fully bilingual now (all aspect titles/subtitles, header, banner, CTA pulled from t.condition.*). Card-detail.tsx Poor/Mint labels and noLiveData also localized. Fixed a critical regression where I18nProvider was used in _layout.tsx without being imported (app crashed at boot). Now app boots and login screen renders cleanly.
+        2) New "Share Card" feature: a polished social-ready card composition rendered off-screen via react-native-view-shot, then snapshotted and shared through expo-sharing. New share-social button lives next to remove/back on card-detail hero. Caption builder uses t.share.captionWithApp(name, price).
+        Please verify:
+          - Boot + login (no I18nProvider error).
+          - Toggle PT/EN on the language flag — all 6 condition aspects, banner, CTA, Poor/Mint labels switch.
+          - On a saved portfolio card, open Card Detail, confirm the share button appears in the top right next to the trash. (Sharing won't open a real share sheet in web preview — expect the in-app "sharing unavailable on this device" banner. Native testing requires development build.)

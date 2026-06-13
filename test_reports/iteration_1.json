@@ -1,0 +1,49 @@
+{
+  "summary": "Frontend-only test. Login screen renders correctly (neon yellow CTA, eye/password toggle visible). However the app is essentially BROKEN past the auth screen due to multiple ReferenceErrors. signup.tsx uses `t.auth.*` without ever importing `useT` or declaring `t` — navigating to /signup throws 'ReferenceError: t is not defined' and shows Expo's red error overlay. dashboard.tsx similarly references `useI18n` without importing it and references undefined `FILTERS` and `label` identifiers inside the chip render (only `FILTERS_BASE` is defined). dashboard.tsx also has NO language flag/toggle button despite the review request explicitly stating 'Language toggle (flag in dashboard top bar) flips between Portuguese and English'. Several dashboard strings are still hardcoded in Portuguese (greeting 'Olá de volta', 'Valor Total da Coleção', 'cartas guardadas', 'Análise do Estado (Raw)'). scan.tsx references a non-existent `styles.frameOutline`. i18n.ts has many TS errors because the EN dictionary is typed against `as const` PT literal types — runtime is fine but type-safety is broken. Could NOT exercise the condition screen i18n, the share button, the value-retention labels, or the tab labels because navigation past auth crashes. Backend untouched per request. Test user testuser+pv@example.com did not exist on Firebase and signup is broken, so the existing account could not be created from the UI.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      { "component": "signup.tsx", "issue": "ReferenceError: t is not defined. File uses t.auth.* in 13 places but never imports useT and never assigns `const t = useT()`. Red error overlay on /signup. Reference: /app/frontend/app/(auth)/signup.tsx (no import of useT; missing `const t = useT();` in component body).", "testID": "signup-screen", "priority": "CRITICAL" },
+      { "component": "dashboard.tsx", "issue": "ReferenceError: useI18n is not defined. Line 48 calls `useI18n()` but the symbol is never imported. Dashboard will crash on mount. Reference: /app/frontend/app/(tabs)/dashboard.tsx:48", "testID": "dashboard-screen", "priority": "CRITICAL" },
+      { "component": "dashboard.tsx", "issue": "ReferenceError: FILTERS is not defined (line 265) and label is not defined (line 282). Only FILTERS_BASE is declared. The chip row will throw. Reference: /app/frontend/app/(tabs)/dashboard.tsx:265,282", "testID": "filter-recent", "priority": "CRITICAL" },
+      { "component": "dashboard.tsx", "issue": "Missing language toggle. Review request requires a flag toggle in the dashboard top bar to flip PT↔EN, but the header only has greeting + logout button. No flag/toggleLocale pressable rendered. Reference: /app/frontend/app/(tabs)/dashboard.tsx:183-191", "testID": "locale-toggle", "priority": "HIGH" },
+      { "component": "dashboard.tsx", "issue": "Hardcoded Portuguese strings not using t. 'Olá de volta' (line 185), 'Valor Total da Coleção' (195), 'cartas guardadas' (200), 'Análise do Estado (Raw)' (208). Should use t.dashboard.greeting / totalLabel / cardsSaved(n) / conditionAnalysis. Reference: /app/frontend/app/(tabs)/dashboard.tsx:185,195,200,208", "testID": "dashboard-screen", "priority": "HIGH" },
+      { "component": "scan.tsx", "issue": "Reference to undefined StyleSheet key styles.frameOutline (line 180). Renders an empty View — minor visual bug but TS error. Reference: /app/frontend/app/(tabs)/scan.tsx:180", "testID": "scan-screen", "priority": "MEDIUM" },
+      { "component": "i18n.ts", "issue": "EN dictionary typed as `typeof pt` where pt is `as const`. All EN literal values fail to assign to PT literal types — dozens of TS2322 errors. Runtime is OK but TS check is broken. Fix by typing pt as Dict-shaped object (not const) or typing en as DeepPartial / loose Dict. Reference: /app/frontend/src/i18n.ts:148", "testID": "n/a", "priority": "LOW" }
+    ],
+    "integration_issues": [
+      { "flow": "Signup → Dashboard", "issue": "Cannot sign up because /signup throws ReferenceError before form submits. Test credentials testuser+pv@example.com cannot be created via UI; existing Firebase user also not present (auth/invalid-credential on login).", "affected_testIDs": ["signup-submit-button","signup-email-input","signup-password-input"] },
+      { "flow": "Login → Dashboard", "issue": "Even after a successful login, dashboard.tsx will crash (3 ReferenceErrors). Could not validate dashboard, condition, card-detail, share, or tab i18n flows downstream.", "affected_testIDs": ["dashboard-screen","tab-dashboard","tab-scan","tab-upgrade"] }
+    ],
+    "design_issues": [
+      { "screen": "login", "issues": ["Renders correctly. Neon yellow CTA, eye toggle present. No issues observed."] }
+    ],
+    "react_native_issues": [
+      { "component": "shadow*/textShadow* styles", "issue": "Web preview warns 'shadow*' and 'textShadow*' style props are deprecated; use 'boxShadow' / 'textShadow'. Affects cards/buttons with shadowColor/textShadowColor. Non-blocking but worth migrating." }
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_1.json"],
+  "action_items": [
+    "Fix signup.tsx: add `import { useT } from '@/src/i18n-context';` and `const t = useT();` inside SignupScreen before any t.* usage.",
+    "Fix dashboard.tsx: add `import { useI18n } from '@/src/i18n-context';` at the top. Inside the render replace `FILTERS.map((f) => { ... {label}` with the actual computed array from FILTERS_BASE and resolve labels via `f.labelKey ? t.dashboard[`filter${capitalize(f.labelKey)}`] : f.condLabel`. The `label` variable used in the JSX is also undefined.",
+    "Add a language toggle Pressable (flag icon) in dashboard headerRow that calls `toggleLocale()` from useI18n. The review_request expects this control.",
+    "Replace remaining hardcoded PT strings in dashboard.tsx (greeting, totalLabel, totalMetaText/cardsSaved, conditionAnalysis) with t.dashboard.* keys (the dictionary already has them).",
+    "Fix scan.tsx: define `frameOutline` in StyleSheet.create or remove the View on line 180.",
+    "Fix i18n.ts TS typing: declare `pt` without `as const` and shape `en` against an explicit Dict interface so EN strings are accepted by TypeScript.",
+    "Once dashboard/signup compile, re-run testing to verify language-flag toggle, condition screen i18n, share button banner, and tab label translations."
+  ],
+  "critical_code_review_comments": [
+    "dashboard.tsx is 448 lines with multiple undefined symbols; must compile-test before shipping. Add ESLint react/no-undef and TS strict checks in pre-push.",
+    "signup.tsx not parallel with login.tsx — login presumably uses t correctly; signup is regression.",
+    "i18n.ts: using `as const` on the source dict makes adding an EN translation a type error. Type the dictionary with an explicit interface, not via `typeof pt`.",
+    "card-detail.tsx correctly guards web with Platform.OS check for share — good fallback to t.share.sharingUnavailable banner.",
+    "share-card.tsx is well structured; uses dictionaries[locale] directly so works whatever the active locale is at share time."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "skipped", "frontend": "20%" },
+  "seed_data_creation": "None. Signup is broken so testuser+pv@example.com could not be created via UI; backend not touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "After main agent fixes the 5 ReferenceErrors (useT in signup, useI18n + FILTERS + label in dashboard, frameOutline in scan) and adds the locale toggle to dashboard header, validate: (1) signup with testuser+pv@example.com / TestPass123! reaches dashboard, (2) flag toggle flips PT↔EN and updates Condition screen aspect titles + subtitles + Whitening/Scratches + Grade/Value retained + Calculate button + header title + detected-card banner, (3) tab labels translate, (4) card-detail shows detail-share button and tapping on web shows 'Sharing unavailable on this device.' banner instead of crashing, (5) Poor/Mint labels under retention bar still render literally in PT (they're identical in dictionary by design).",
+  "rca_of_issue": "Main agent refactored condition.tsx (ASPECT_KEYS) and added share-card.tsx successfully but forgot to wire useT/useI18n imports into signup.tsx and dashboard.tsx during the same i18n pass. The handoff note mentioned only condition.tsx + card-detail.tsx + (tabs)/_layout.tsx — those three files compile and translate correctly. The undone work is on dashboard.tsx (incomplete refactor: t-keys partially added, FILTERS rename half-applied) and signup.tsx (never refactored). Reproduce: load /signup → red error overlay 'ReferenceError: t is not defined'."
+}

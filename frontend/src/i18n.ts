@@ -101,6 +101,21 @@ const pt = {
     saved: 'Guardada',
     removeConfirmTitle: 'Remover carta?',
     removeConfirmBody: 'Isto vai eliminar a carta do teu portfólio.',
+    poor: 'Poor',
+    mint: 'Mint',
+    noLiveData: 'Ainda não há dados de mercado ao vivo para esta carta.',
+  },
+  share: {
+    shareCard: 'Partilhar carta',
+    sharingUnavailable: 'Partilha indisponível neste dispositivo.',
+    shareFailed: 'Não foi possível partilhar a carta.',
+    title: 'A minha carta avaliada',
+    valueRetained: 'Valor mantido',
+    estimatedValue: 'Valor estimado',
+    grade: 'Estado',
+    poweredBy: 'Avaliada com PokeValue Scanner',
+    captionWithApp: (name: string, value: string) =>
+      `🔥 A minha ${name} vale ${value}! Avaliada no PokeValue Scanner.`,
   },
   paywall: {
     title: 'Torna-te um Colecionador Pro 🚀',
@@ -224,6 +239,21 @@ const en: typeof pt = {
     saved: 'Saved',
     removeConfirmTitle: 'Remove card?',
     removeConfirmBody: 'This will delete it from your portfolio.',
+    poor: 'Poor',
+    mint: 'Mint',
+    noLiveData: 'No live market data for this card yet.',
+  },
+  share: {
+    shareCard: 'Share card',
+    sharingUnavailable: 'Sharing unavailable on this device.',
+    shareFailed: 'Could not share the card.',
+    title: 'My graded card',
+    valueRetained: 'Value retained',
+    estimatedValue: 'Estimated value',
+    grade: 'Grade',
+    poweredBy: 'Graded with PokeValue Scanner',
+    captionWithApp: (name: string, value: string) =>
+      `🔥 My ${name} is worth ${value}! Graded on PokeValue Scanner.`,
   },
   paywall: {
     title: 'Become a Pro Collector 🚀',

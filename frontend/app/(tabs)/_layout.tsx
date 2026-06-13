@@ -3,8 +3,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Platform, StyleSheet, View } from 'react-native';
 import { COLORS } from '@/src/theme';
+import { useT } from '@/src/i18n-context';
 
 export default function TabsLayout() {
+  const t = useT();
   return (
     <Tabs
       screenOptions={{
@@ -14,7 +16,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
         tabBarStyle: {
           position: 'absolute',
-          backgroundColor: Platform.OS === 'android' ? 'rgba(10,11,14,0.96)' : 'transparent',
+          backgroundColor: Platform.OS === 'android' ? 'rgba(18,18,18,0.96)' : 'transparent',
           borderTopColor: COLORS.divider,
           borderTopWidth: StyleSheet.hairlineWidth,
           height: 72,
@@ -25,14 +27,14 @@ export default function TabsLayout() {
           Platform.OS === 'ios' ? (
             <BlurView tint="dark" intensity={70} style={StyleSheet.absoluteFill} />
           ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,11,14,0.96)' }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,18,18,0.96)' }]} />
           ),
       }}
     >
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: 'Portfolio',
+          title: t.tabs.portfolio,
           tabBarIcon: ({ color }) => <Ionicons name="grid-outline" size={22} color={color} />,
           tabBarButtonTestID: 'tab-dashboard',
         }}
@@ -40,7 +42,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="scan"
         options={{
-          title: 'Scan',
+          title: t.tabs.scan,
           tabBarIcon: ({ color }) => <Ionicons name="scan-outline" size={24} color={color} />,
           tabBarButtonTestID: 'tab-scan',
         }}
@@ -48,7 +50,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="upgrade"
         options={{
-          title: 'Upgrade',
+          title: t.tabs.upgrade,
           tabBarIcon: ({ color }) => <Ionicons name="flash-outline" size={22} color={color} />,
           tabBarButtonTestID: 'tab-upgrade',
         }}

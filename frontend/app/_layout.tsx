@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
 import { AuthProvider } from '@/src/auth-context';
 import { RevenueCatProvider } from '@/src/revenuecat-context';
+import { I18nProvider } from '@/src/i18n-context';
 
 // Keep the native splash visible from cold start until icon fonts register.
 // Required because @expo/vector-icons' componentDidMount fallback fires

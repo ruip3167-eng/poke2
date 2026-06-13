@@ -1,21 +1,26 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import type ViewShot from 'react-native-view-shot';
 
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { formatPrice } from '@/src/grading';
 import { scanStore } from '@/src/scan-store';
+import { useI18n } from '@/src/i18n-context';
+import { ShareCard, shareCardSnapshot } from '@/src/share-card';
 const FALLBACK_CARD = 'https://images.unsplash.com/photo-1613771404784-3a5686aa2be3?crop=entropy&cs=srgb&fm=jpg&w=600&q=80';
 
 export default function CardDetailScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t, locale } = useI18n();
+  const shareRef = useRef<ViewShot>(null);
   const p = useLocalSearchParams<{
     id?: string;
     name: string; set_name?: string; number?: string; image_url?: string;
@@ -27,6 +32,7 @@ export default function CardDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(p.mode === 'saved');
   const [err, setErr] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   const market = Number(p.market_price || '0');
   const estimated = Number(p.estimated_value || '0');
@@ -79,15 +85,39 @@ export default function CardDetailScreen() {
 
   const remove = async () => {
     if (!p.id) return;
-    Alert.alert('Remove card?', 'This will delete it from your portfolio.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t.detail.removeConfirmTitle, t.detail.removeConfirmBody, [
+      { text: t.common.cancel, style: 'cancel' },
       {
-        text: 'Remove', style: 'destructive', onPress: async () => {
+        text: t.common.remove, style: 'destructive', onPress: async () => {
           await api.deleteCard(p.id!);
           router.replace('/(tabs)/dashboard');
         },
       },
     ]);
+  };
+
+  const share = async () => {
+    if (sharing) return;
+    // Web preview has no view-shot / native share. Fail gracefully.
+    if (Platform.OS === 'web') {
+      setErr(t.share.sharingUnavailable);
+      setTimeout(() => setErr(null), 2500);
+      return;
+    }
+    setSharing(true);
+    setErr(null);
+    try {
+      // Give the off-screen ShareCard a tick to lay out before snapshotting.
+      await new Promise((r) => setTimeout(r, 50));
+      const caption = t.share.captionWithApp(p.name, formatPrice(estimated));
+      const res = await shareCardSnapshot(shareRef, caption, locale);
+      if (!res.ok && res.error) {
+        setErr(res.error);
+        setTimeout(() => setErr(null), 3000);
+      }
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -103,11 +133,24 @@ export default function CardDetailScreen() {
           <Pressable onPress={() => router.back()} style={styles.iconBtn} testID="detail-close">
             <Ionicons name="chevron-back" size={22} color={COLORS.onSurface} />
           </Pressable>
-          {p.id ? (
-            <Pressable onPress={remove} style={styles.iconBtn} testID="detail-remove">
-              <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+          <View style={styles.heroActions}>
+            <Pressable
+              onPress={share}
+              style={styles.iconBtn}
+              testID="detail-share"
+              accessibilityLabel={t.share.shareCard}
+              disabled={sharing}
+            >
+              {sharing
+                ? <ActivityIndicator color={COLORS.brand} size="small" />
+                : <Ionicons name="share-social-outline" size={20} color={COLORS.brand} />}
             </Pressable>
-          ) : <View style={{ width: 40 }} />}
+            {p.id ? (
+              <Pressable onPress={remove} style={styles.iconBtn} testID="detail-remove">
+                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+              </Pressable>
+            ) : null}
+          </View>
         </SafeAreaView>
       </View>
 
@@ -122,11 +165,11 @@ export default function CardDetailScreen() {
         <View style={styles.gradeBlock}>
           <View style={styles.gradeRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.metaLabel}>Condition</Text>
+              <Text style={styles.metaLabel}>{t.detail.condition}</Text>
               <Text style={styles.gradeText}>{p.condition_grade}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.metaLabel}>Value retained</Text>
+              <Text style={styles.metaLabel}>{t.detail.valueRetained}</Text>
               <Text style={styles.gradeMult} testID="value-retained-pct">{Math.round(mult * 100)}%</Text>
             </View>
           </View>
@@ -149,20 +192,18 @@ export default function CardDetailScreen() {
             />
           </View>
           <View style={styles.retentionLabels}>
-            <Text style={styles.retentionLabelTxt}>Poor</Text>
-            <Text style={styles.retentionLabelTxt}>Mint</Text>
+            <Text style={styles.retentionLabelTxt}>{t.detail.poor}</Text>
+            <Text style={styles.retentionLabelTxt}>{t.detail.mint}</Text>
           </View>
         </View>
 
         <View style={styles.estimateCard}>
-          <Text style={styles.metaLabel}>Valor estimado</Text>
+          <Text style={styles.metaLabel}>{t.detail.estimatedValue}</Text>
           <Text style={styles.estimateValue} testID="detail-estimated-value">{formatPrice(estimated)}</Text>
-          <Text style={styles.estimateSub}>
-            {formatPrice(market)} × {Math.round(mult * 100)}% condition
-          </Text>
+          <Text style={styles.estimateSub}>{t.detail.estimatedSub(formatPrice(market), Math.round(mult * 100))}</Text>
         </View>
 
-        <Text style={styles.section}>Live market</Text>
+        <Text style={styles.section}>{t.detail.liveMarket}</Text>
         <View style={styles.marketRow}>
           <View style={styles.marketCard}>
             <View style={styles.marketIcon}><Ionicons name="cash-outline" size={16} color={COLORS.brand} /></View>
@@ -179,8 +220,8 @@ export default function CardDetailScreen() {
         {isFallback && (
           <View style={styles.info} testID="demo-price-notice">
             <Ionicons name="information-circle-outline" size={16} color={COLORS.brand} />
-            <Text style={styles.infoText} numberOfLines={3}>
-              Demo price: this card isn{'\u2019'}t in our live price feed yet, so we{'\u2019'}re using a placeholder market value of {formatPrice(market)}.
+            <Text style={styles.warnText} numberOfLines={3}>
+              {t.detail.demoNotice(formatPrice(market))}
             </Text>
           </View>
         )}
@@ -189,7 +230,7 @@ export default function CardDetailScreen() {
           <View style={styles.warn} testID="price-error">
             <Ionicons name="information-circle-outline" size={16} color={COLORS.warning} />
             <Text style={styles.warnText} numberOfLines={3}>
-              No live market data for this card yet. {p.price_error}
+              {t.detail.noLiveData} {p.price_error}
             </Text>
           </View>
         )}
@@ -215,13 +256,30 @@ export default function CardDetailScreen() {
             ) : savedOk ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="checkmark" size={20} color={COLORS.onBrand} />
-                <Text style={styles.ctaText}>Saved</Text>
+                <Text style={styles.ctaText}>{t.detail.saved}</Text>
               </View>
             ) : (
-              <Text style={styles.ctaText}>Add to portfolio</Text>
+              <Text style={styles.ctaText}>{t.detail.addToPortfolio}</Text>
             )}
           </Pressable>
         </SafeAreaView>
+      )}
+
+      {/* Off-screen composer used to snapshot a polished share card. */}
+      {Platform.OS !== 'web' && (
+        <ShareCard
+          ref={shareRef}
+          locale={locale}
+          data={{
+            name: p.name,
+            setName: p.set_name,
+            number: p.number,
+            imageUri: displayImage,
+            grade: p.condition_grade,
+            multiplier: mult,
+            estimatedValue: estimated,
+          }}
+        />
       )}
     </View>
   );
@@ -232,6 +290,7 @@ const styles = StyleSheet.create({
   heroWrap: { height: 360, backgroundColor: COLORS.surfaceTertiary },
   hero: { width: '100%', height: '100%' },
   heroTop: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: SPACING.lg },
+  heroActions: { flexDirection: 'row', gap: SPACING.sm },
   iconBtn: { width: 40, height: 40, borderRadius: RADII.pill, backgroundColor: 'rgba(20,22,28,0.85)', alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, marginTop: -32 },
   bodyContent: { paddingHorizontal: SPACING.lg, paddingBottom: 120 },
