@@ -9,9 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { auth, signInWithEmailAndPassword } from '@/src/firebase';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
+import { useT } from '@/src/i18n-context';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const t = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -43,14 +45,14 @@ export default function LoginScreen() {
             <Text style={styles.brandText}>PokéValue</Text>
           </View>
 
-          <Text style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>Sign in to access your portfolio.</Text>
+          <Text style={styles.title}>{t.auth.welcomeBack}</Text>
+          <Text style={styles.subtitle}>{t.auth.signInSubtitle}</Text>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t.auth.email}</Text>
           <TextInput
             testID="login-email-input"
             style={styles.input}
-            placeholder="you@example.com"
+            placeholder={t.auth.emailPlaceholder}
             placeholderTextColor={COLORS.onSurfaceTertiary}
             keyboardType="email-address"
             autoCapitalize="none"
@@ -58,12 +60,12 @@ export default function LoginScreen() {
             onChangeText={setEmail}
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>{t.auth.password}</Text>
           <View style={styles.passwordRow}>
             <TextInput
               testID="login-password-input"
               style={styles.passwordInput}
-              placeholder="••••••••"
+              placeholder={t.auth.passwordPlaceholder}
               placeholderTextColor={COLORS.onSurfaceTertiary}
               secureTextEntry={!showPassword}
               value={password}
@@ -76,7 +78,7 @@ export default function LoginScreen() {
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={10}
               style={styles.eyeBtn}
-              accessibilityLabel={showPassword ? 'Ocultar palavra-passe' : 'Ver palavra-passe'}
+              accessibilityLabel={showPassword ? t.auth.hidePassword : t.auth.showPassword}
             >
               <Ionicons
                 name={showPassword ? 'eye-off-outline' : 'eye-outline'}
@@ -96,14 +98,14 @@ export default function LoginScreen() {
           >
             {loading
               ? <ActivityIndicator color={COLORS.onBrand} />
-              : <Text style={styles.primaryBtnText}>Sign in</Text>}
+              : <Text style={styles.primaryBtnText}>{t.auth.signInBtn}</Text>}
           </Pressable>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>New here?  </Text>
+            <Text style={styles.footerText}>{t.auth.newHere}  </Text>
             <Link href="/(auth)/signup" asChild>
               <Pressable testID="login-go-signup">
-                <Text style={styles.linkText}>Create account</Text>
+                <Text style={styles.linkText}>{t.auth.createAccountLink}</Text>
               </Pressable>
             </Link>
           </View>

@@ -20,14 +20,14 @@ export default function SignupScreen() {
 
   const submit = async () => {
     if (!email.trim() || password.length < 6) {
-      setErr('Email required and password ≥ 6 chars'); return;
+      setErr(t.auth.passwordMinChars); return;
     }
     setErr(null); setLoading(true);
     try {
       await createUserWithEmailAndPassword(auth, email.trim(), password);
       router.replace('/(tabs)/dashboard');
     } catch (e: any) {
-      setErr(e?.message?.replace('Firebase: ', '') ?? 'Signup failed');
+      setErr(e?.message?.replace('Firebase: ', '') ?? t.auth.signupFailed);
     } finally {
       setLoading(false);
     }
@@ -45,14 +45,14 @@ export default function SignupScreen() {
             <Text style={styles.brandText}>PokéValue</Text>
           </View>
 
-          <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>Track every card you scan. Free 10 scans, then go Pro.</Text>
+          <Text style={styles.title}>{t.auth.createAccount}</Text>
+          <Text style={styles.subtitle}>{t.auth.signUpSubtitle}</Text>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t.auth.email}</Text>
           <TextInput
             testID="signup-email-input"
             style={styles.input}
-            placeholder="you@example.com"
+            placeholder={t.auth.emailPlaceholder}
             placeholderTextColor={COLORS.onSurfaceTertiary}
             keyboardType="email-address"
             autoCapitalize="none"
@@ -60,12 +60,12 @@ export default function SignupScreen() {
             onChangeText={setEmail}
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>{t.auth.password}</Text>
           <View style={styles.passwordRow}>
             <TextInput
               testID="signup-password-input"
               style={styles.passwordInput}
-              placeholder="At least 6 characters"
+              placeholder={t.auth.passwordHint}
               placeholderTextColor={COLORS.onSurfaceTertiary}
               secureTextEntry={!showPassword}
               value={password}
@@ -78,7 +78,7 @@ export default function SignupScreen() {
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={10}
               style={styles.eyeBtn}
-              accessibilityLabel={showPassword ? 'Ocultar palavra-passe' : 'Ver palavra-passe'}
+              accessibilityLabel={showPassword ? t.auth.hidePassword : t.auth.showPassword}
             >
               <Ionicons
                 name={showPassword ? 'eye-off-outline' : 'eye-outline'}
@@ -98,14 +98,14 @@ export default function SignupScreen() {
           >
             {loading
               ? <ActivityIndicator color={COLORS.onBrand} />
-              : <Text style={styles.primaryBtnText}>Create account</Text>}
+              : <Text style={styles.primaryBtnText}>{t.auth.signUpBtn}</Text>}
           </Pressable>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account?  </Text>
+            <Text style={styles.footerText}>{t.auth.alreadyHaveAccount}  </Text>
             <Link href="/(auth)/login" asChild>
               <Pressable testID="signup-go-login">
-                <Text style={styles.linkText}>Sign in</Text>
+                <Text style={styles.linkText}>{t.auth.signInLink}</Text>
               </Pressable>
             </Link>
           </View>

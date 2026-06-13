@@ -22,14 +22,14 @@ interface FilterChip {
   icon?: keyof typeof Ionicons.glyphMap;
 }
 
-const FILTERS: FilterChip[] = [
-  { key: 'recent', label: 'Mais Recentes', icon: 'time-outline' },
-  { key: 'value',  label: 'Maior Valor',   icon: 'trending-up-outline' },
-  { key: 'Mint',          label: 'Mint' },
-  { key: 'Near Mint',     label: 'Near Mint' },
-  { key: 'Lightly Played', label: 'Lightly Played' },
-  { key: 'Played',        label: 'Played' },
-  { key: 'Poor',          label: 'Poor' },
+const FILTERS_BASE: { key: FilterKey; labelKey: 'recent' | 'value' | null; condLabel?: string; icon?: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'recent', labelKey: 'recent', icon: 'time-outline' },
+  { key: 'value',  labelKey: 'value',   icon: 'trending-up-outline' },
+  { key: 'Mint',          labelKey: null, condLabel: 'Mint' },
+  { key: 'Near Mint',     labelKey: null, condLabel: 'Near Mint' },
+  { key: 'Lightly Played', labelKey: null, condLabel: 'Lightly Played' },
+  { key: 'Played',        labelKey: null, condLabel: 'Played' },
+  { key: 'Poor',          labelKey: null, condLabel: 'Poor' },
 ];
 
 // Grade → colour ramp (green → red).
@@ -45,6 +45,7 @@ const GRADE_ORDER = ['Mint', 'Near Mint', 'Lightly Played', 'Played', 'Poor'];
 export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const { t, locale, toggleLocale } = useI18n();
   const [cards, setCards] = useState<CardRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -134,7 +135,7 @@ export default function DashboardScreen() {
       </View>
       <View style={styles.rowInfo}>
         <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.rowSet} numberOfLines={1}>{item.set_name || 'Coleção desconhecida'}</Text>
+        <Text style={styles.rowSet} numberOfLines={1}>{item.set_name || t.dashboard.unknownSet}</Text>
         <View style={styles.gradeChip}>
           <View style={[styles.gradeDot, { backgroundColor: GRADE_COLORS[item.condition_grade] ?? COLORS.onSurfaceTertiary }]} />
           <Text style={styles.gradeChipText}>{item.condition_grade}</Text>
@@ -150,12 +151,10 @@ export default function DashboardScreen() {
         <Ionicons name="albums-outline" size={48} color={COLORS.brand} />
       </View>
       <Text style={styles.emptyTitle}>
-        {cards.length === 0 ? 'A tua coleção está vazia' : 'Sem resultados'}
+        {cards.length === 0 ? t.dashboard.emptyTitle : t.dashboard.noResults}
       </Text>
       <Text style={styles.emptySub}>
-        {cards.length === 0
-          ? 'Faz scan da tua primeira carta para começar a acompanhar o valor de mercado.'
-          : 'Tenta ajustar a pesquisa ou os filtros.'}
+        {cards.length === 0 ? t.dashboard.emptySub : t.dashboard.noResultsSub}
       </Text>
       {cards.length === 0 && (
         <Pressable
@@ -164,7 +163,7 @@ export default function DashboardScreen() {
           onPress={() => router.push('/(tabs)/scan')}
         >
           <Ionicons name="scan-outline" size={18} color={COLORS.onBrand} />
-          <Text style={styles.emptyCtaText}>Scan Card</Text>
+          <Text style={styles.emptyCtaText}>{t.dashboard.scanCard}</Text>
         </Pressable>
       )}
     </View>
@@ -236,13 +235,13 @@ export default function DashboardScreen() {
             )}
 
             {/* Collection header + search */}
-            <Text style={styles.section}>Coleção</Text>
+            <Text style={styles.section}>{t.dashboard.collection}</Text>
 
             <View style={styles.searchWrap}>
               <Ionicons name="search-outline" size={18} color={COLORS.onSurfaceTertiary} />
               <TextInput
                 testID="search-input"
-                placeholder="Procurar Pokémon ou coleção…"
+                placeholder={t.dashboard.searchPlaceholder}
                 placeholderTextColor={COLORS.onSurfaceTertiary}
                 value={query}
                 onChangeText={setQuery}
@@ -280,7 +279,7 @@ export default function DashboardScreen() {
                       />
                     )}
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {f.label}
+                      {label}
                     </Text>
                   </Pressable>
                 );

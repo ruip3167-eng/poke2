@@ -29,28 +29,30 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <RevenueCatProvider>
-          <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#121212' } }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="condition"
-              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-            />
-            <Stack.Screen
-              name="card-detail"
-              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-            />
-            <Stack.Screen
-              name="paywall"
-              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-            />
-          </Stack>
-        </RevenueCatProvider>
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <RevenueCatProvider>
+            <StatusBar style="light" />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#121212' } }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen
+                name="condition"
+                options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+              />
+              <Stack.Screen
+                name="card-detail"
+                options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+              />
+              <Stack.Screen
+                name="paywall"
+                options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+              />
+            </Stack>
+          </RevenueCatProvider>
+        </AuthProvider>
+      </I18nProvider>
     </SafeAreaProvider>
   );
 }

@@ -14,48 +14,22 @@ import { useRevenueCat } from '@/src/revenuecat-context';
 import { purchaseByIdentifier, getCustomerInfo, hasProAccess } from '@/src/revenuecat';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 
-type PlanKey = 'monthly' | 'yearly';
+import { useT } from '@/src/i18n-context';
 
-interface Plan {
-  key: PlanKey;
-  label: string;
-  price: string;
-  unit: string;
-  perMonth?: string;
-  savePct?: string;
-}
-
-const PLANS: Record<PlanKey, Plan> = {
-  monthly: {
-    key: 'monthly',
-    label: 'Plano Mensal',
-    price: '3,99 €',
-    unit: '/ mês',
-  },
-  yearly: {
-    key: 'yearly',
-    label: 'Plano Anual',
-    price: '27,99 €',
-    unit: '/ ano',
-    perMonth: 'Apenas 2,33 € por mês',
-    savePct: 'POUPA 41%',
-  },
-};
-
-const BENEFITS = [
-  'Scans de IA e avaliações de estado ilimitados',
-  'Histórico completo e gráficos de evolução do valor do teu Portfólio',
-  'Suporte prioritário para novas coleções e Cartas Desportivas',
-] as const;
+const PLAN_PRICES = { monthly: '3,99 €', annual: '27,99 €' };
 
 export default function PaywallScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { available: rcAvailable, refresh: refreshRC } = useRevenueCat();
+  const t = useT();
+  type PlanKey = 'monthly' | 'yearly';
   // Yearly selected by default — drives conversion to the higher-LTV plan.
   const [selected, setSelected] = useState<PlanKey>('yearly');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const BENEFITS = [t.paywall.benefit1, t.paywall.benefit2, t.paywall.benefit3];
 
   const pickPlan = (k: PlanKey) => {
     if (k === selected) return;
@@ -84,10 +58,10 @@ export default function PaywallScreen() {
           return;
         }
         if (res.reason === 'no-offering' || res.reason?.startsWith('no-')) {
-          setErr('Subscrição indisponível neste momento. Tenta novamente em breve.');
+          setErr(t.paywall.unavailable);
           return;
         }
-        setErr(res.reason ?? 'Não foi possível processar a subscrição');
+        setErr(res.reason ?? t.paywall.purchaseFailed);
         return;
       }
       // Expo Go / web fallback — keep the existing mock so the app stays usable
@@ -96,7 +70,7 @@ export default function PaywallScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       router.replace('/(tabs)/dashboard');
     } catch (e: any) {
-      setErr(e?.message ?? 'Não foi possível processar a subscrição');
+      setErr(e?.message ?? t.paywall.purchaseFailed);
     } finally {
       setLoading(false);
     }
@@ -112,24 +86,27 @@ export default function PaywallScreen() {
           router.replace('/(tabs)/dashboard');
           return;
         }
-        setErr('Nenhuma subscrição ativa encontrada nesta conta.');
+        setErr(t.paywall.noActiveSub);
         return;
       }
-      // mock fallback — use backend is_pro flag
       const c = await api.getScanCount(user.uid);
       if (c.is_pro) {
         router.replace('/(tabs)/dashboard');
         return;
       }
-      setErr('Nenhuma subscrição ativa encontrada nesta conta.');
+      setErr(t.paywall.noActiveSub);
     } catch {
-      setErr('Não foi possível verificar compras anteriores.');
+      setErr(t.paywall.restoreFailed);
     }
   };
 
   const renderPlan = (k: PlanKey) => {
-    const p = PLANS[k];
     const isSelected = selected === k;
+    const label = k === 'yearly' ? t.paywall.annualLabel : t.paywall.monthlyLabel;
+    const price = k === 'yearly' ? PLAN_PRICES.annual : PLAN_PRICES.monthly;
+    const unit = k === 'yearly' ? t.paywall.perYear : t.paywall.perMonth;
+    const perMonth = k === 'yearly' ? t.paywall.annualPerMonth : undefined;
+    const savePct = k === 'yearly' ? t.paywall.save : undefined;
     return (
       <Pressable
         key={k}
@@ -137,24 +114,22 @@ export default function PaywallScreen() {
         onPress={() => pickPlan(k)}
         style={[styles.planCard, isSelected && styles.planCardActive]}
       >
-        {p.savePct && (
+        {savePct && (
           <View style={styles.saveBadge}>
-            <Text style={styles.saveBadgeText}>{p.savePct}</Text>
+            <Text style={styles.saveBadgeText}>{savePct}</Text>
           </View>
         )}
         <View style={styles.planHeader}>
-          <Text style={styles.planLabel}>{p.label}</Text>
+          <Text style={styles.planLabel}>{label}</Text>
           <View style={[styles.radio, isSelected && styles.radioActive]}>
             {isSelected && <View style={styles.radioDot} />}
           </View>
         </View>
         <View style={styles.priceRow}>
-          <Text style={[styles.priceValue, isSelected && styles.priceValueActive]}>
-            {p.price}
-          </Text>
-          <Text style={styles.priceUnit}>{p.unit}</Text>
+          <Text style={[styles.priceValue, isSelected && styles.priceValueActive]}>{price}</Text>
+          <Text style={styles.priceUnit}>{unit}</Text>
         </View>
-        {p.perMonth && <Text style={styles.priceSub}>{p.perMonth}</Text>}
+        {perMonth && <Text style={styles.priceSub}>{perMonth}</Text>}
       </Pressable>
     );
   };
@@ -182,7 +157,7 @@ export default function PaywallScreen() {
         </View>
 
         <Text style={styles.title} testID="paywall-title">
-          Torna-te um Colecionador Pro 🚀
+          {t.paywall.title}
         </Text>
 
         <View style={styles.benefits}>
@@ -211,11 +186,11 @@ export default function PaywallScreen() {
         >
           {loading
             ? <ActivityIndicator color={COLORS.onBrand} />
-            : <Text style={styles.ctaText}>Subscrever Agora</Text>}
+            : <Text style={styles.ctaText}>{t.paywall.subscribe}</Text>}
         </Pressable>
 
         <Pressable onPress={restore} style={styles.linkBtn} testID="paywall-restore-button">
-          <Text style={styles.linkText}>Restaurar Compras</Text>
+          <Text style={styles.linkText}>{t.paywall.restore}</Text>
         </Pressable>
 
         <Pressable
@@ -223,13 +198,11 @@ export default function PaywallScreen() {
           style={styles.linkBtn}
           testID="paywall-continue-free-button"
         >
-          <Text style={styles.linkTextDim}>Continuar com a versão gratuita</Text>
+          <Text style={styles.linkTextDim}>{t.paywall.continueFree}</Text>
         </Pressable>
 
         <Text style={styles.disclaimer}>
-          {rcAvailable
-            ? 'Subscrição gerida via RevenueCat · Renovação automática'
-            : 'Pagamento simulado para efeitos de teste · Não há cobrança real'}
+          {rcAvailable ? t.paywall.disclaimerReal : t.paywall.disclaimerMock}
         </Text>
       </ScrollView>
     </SafeAreaView>
