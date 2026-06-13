@@ -140,8 +140,8 @@ const pt = {
   },
   tabs: {
     portfolio: 'Portfólio',
-    scan: 'Scan',
-    upgrade: 'Upgrade',
+    scan: 'Scanear',
+    upgrade: 'Pro',
   },
 } as const;
 
