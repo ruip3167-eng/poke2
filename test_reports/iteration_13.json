@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend-only verification of the Scarlet & Violet picker pin (manual-search.tsx). All six requested scenarios pass against the live preview after Firebase login as testuser+pv@example.com. (1) Opening /manual-search and tapping manual-set-picker renders the modal list with the FIRST THREE rows in the exact required order: manual-set-option-sv1 'Scarlet & Violet' (no badge), manual-set-option-sv1S 'Scarlet ex [Japanese]' (Japanese badge), manual-set-option-sv1V 'Violet ex [Japanese]' (Japanese badge). (2) Selecting sv1S closes the modal, the main picker shows the set name with the neon-yellow 'Japanese' badge inline, and the testID='manual-jp-warning' info box renders below explaining the JP API limitation. (3) Selecting western sv1 shows neither the JP badge nor the warning box. (4) With sv1 + number 113, tapping Search Card fires GET /api/cards/find?set_id=sv1&number=113 and routes successfully — Riolu detected (router went to /condition with name=Riolu, set_name=Scarlet & Violet, number=113). (5) With sv1S + number 1, the request fires GET /api/cards/find?set_id=sv1S&number=1 returning 404; the UI renders inline error 'No card matched those details.' via testID='manual-search-error' with no crash and remains on /manual-search. (6) Filter regression — typing 'scarlet' in manual-set-search-input still narrows to all Scarlet-* sets and the three pinned ones (sv1, sv1S, sv1V) remain at the top of the filtered list. No backend retests performed (per request).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "Inline Playwright run — covered picker order, JP badges, JP warning visibility, western no-badge/no-warning, sv1+113 → /condition Riolu, sv1S+1 → 404 inline error, filter regression for 'scarlet' query"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "reorderAndPinSets() correctly handles the case where the API returns the western set with lowercase id 'sv1'; pinned synthetic entries use mixed-case 'sv1S'/'sv1V' which is intentional and forwarded to the backend verbatim (verified in the GET URL).",
+    "isJapaneseOnly uses a Set lookup with case-sensitive ids ('sv1S','sv1V') — matches the synthetic entries; safe because users cannot type these ids manually, they only come from the pinned list.",
+    "japaneseWarning copy is honest and points users to the western variant fallback — good UX touch.",
+    "Minor cosmetic: the synthetic JP entries reuse release_date '2023/01/20' and total/printed_total=78 which are placeholders; they are never persisted or shown beyond the picker meta line, so safe."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "skipped",
+    "frontend": "100% (6/6 scenarios)"
+  },
+  "seed_data_creation": "No seed data created. Reused existing Firebase test user testuser+pv@example.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Live preview URL: https://card-scanner-pro-8.preview.emergentagent.com. Firebase login works with testuser+pv@example.com / TestPass123!. Direct nav to /manual-search after login lands on the screen. Set picker rows use testID 'manual-set-option-{id}' — pinned ids are 'sv1', 'sv1S', 'sv1V'. The JP warning has testID='manual-jp-warning'. The inline error has testID='manual-search-error'. Backend /api/cards/find correctly returns 404 for set_id=sv1S (pokemontcg.io has no JP data) and 200 with Riolu data for set_id=sv1&number=113.",
+  "rca_of_issue": "N/A — implementation matches the spec exactly; reorderAndPinSets() prepends western sv1 + the two synthetic JP entries; isJapaneseOnly() drives both the badge and the manual-jp-warning box; existing api.findCard call is reused unchanged for the JP ids and the existing 404 → notFound error mapping in onSearch surfaces the localized error inline."
+}

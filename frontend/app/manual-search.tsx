@@ -51,10 +51,56 @@ export default function ManualSearchScreen() {
   useEffect(() => {
     let cancelled = false;
     api.listSets()
-      .then((data) => { if (!cancelled) setSets(data); })
+      .then((data) => { if (!cancelled) setSets(reorderAndPinSets(data)); })
       .catch(() => { if (!cancelled) setSetsError(true); });
     return () => { cancelled = true; };
   }, []);
+
+  /**
+   * Move the western Scarlet & Violet base set to the top and *prepend*
+   * synthetic entries for the Japanese SV bases. pokemontcg.io's free API
+   * is English-centric and currently has zero cards under sv1S / sv1V, but
+   * users explicitly want to be able to pick them — we add an inline note
+   * (see `isJapaneseFlagged` below) so they know to expect "card not found"
+   * for the JP variants until the API ships JP data.
+   *
+   * Also: the API returns id `sv1` lowercase for the western set; we keep
+   * it untouched but ensure the order is: SV western → SV ex JP → SV ex JP V → rest.
+   */
+  function reorderAndPinSets(all: SetSummary[]): SetSummary[] {
+    const svWestern = all.find((s) => s.id.toLowerCase() === 'sv1');
+    const pinned: SetSummary[] = [];
+    if (svWestern) pinned.push(svWestern);
+    pinned.push({
+      id: 'sv1S',
+      name: 'Scarlet ex [Japanese]',
+      series: 'Scarlet & Violet · Japan',
+      release_date: '2023/01/20',
+      total: 78,
+      printed_total: 78,
+      symbol_url: null,
+      logo_url: null,
+    });
+    pinned.push({
+      id: 'sv1V',
+      name: 'Violet ex [Japanese]',
+      series: 'Scarlet & Violet · Japan',
+      release_date: '2023/01/20',
+      total: 78,
+      printed_total: 78,
+      symbol_url: null,
+      logo_url: null,
+    });
+    const rest = all.filter((s) => s.id.toLowerCase() !== 'sv1');
+    return [...pinned, ...rest];
+  }
+
+  // Synthetic Japanese variants don't have live data on pokemontcg.io
+  // (the API only ships English/international releases). We surface this
+  // honestly in the UI so the user doesn't waste time wondering why the
+  // lookup keeps 404'ing.
+  const JAPANESE_ONLY_IDS = new Set(['sv1S', 'sv1V']);
+  const isJapaneseOnly = (id: string) => JAPANESE_ONLY_IDS.has(id);
 
   const filteredSets = useMemo(() => {
     if (!sets) return [];
@@ -161,7 +207,14 @@ export default function ManualSearchScreen() {
             <Text style={styles.pickerPlaceholder}>{t.manualSearch.noSets}</Text>
           ) : selectedSet ? (
             <View style={styles.pickerValue}>
-              <Text style={styles.pickerName} numberOfLines={1}>{selectedSet.name}</Text>
+              <View style={styles.pickerNameRow}>
+                <Text style={styles.pickerName} numberOfLines={1}>{selectedSet.name}</Text>
+                {isJapaneseOnly(selectedSet.id) && (
+                  <View style={styles.jpBadge}>
+                    <Text style={styles.jpBadgeText}>{t.manualSearch.japaneseBadge}</Text>
+                  </View>
+                )}
+              </View>
               {selectedSet.series ? (
                 <Text style={styles.pickerSeries} numberOfLines={1}>{selectedSet.series}</Text>
               ) : null}
@@ -171,6 +224,13 @@ export default function ManualSearchScreen() {
           )}
           <Ionicons name="chevron-down" size={18} color={COLORS.onSurfaceTertiary} />
         </Pressable>
+
+        {selectedSet && isJapaneseOnly(selectedSet.id) && (
+          <View style={styles.jpWarn} testID="manual-jp-warning">
+            <Ionicons name="information-circle-outline" size={14} color={COLORS.brand} />
+            <Text style={styles.jpWarnText}>{t.manualSearch.japaneseWarning}</Text>
+          </View>
+        )}
 
         {/* Number input */}
         <Text style={[styles.label, { marginTop: SPACING.lg }]}>{t.manualSearch.numberLabel}</Text>
@@ -249,7 +309,14 @@ export default function ManualSearchScreen() {
                 style={({ pressed }) => [styles.setRow, pressed && { backgroundColor: COLORS.surfaceTertiary }]}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.setRowName} numberOfLines={1}>{item.name}</Text>
+                  <View style={styles.pickerNameRow}>
+                    <Text style={styles.setRowName} numberOfLines={1}>{item.name}</Text>
+                    {isJapaneseOnly(item.id) && (
+                      <View style={styles.jpBadge}>
+                        <Text style={styles.jpBadgeText}>{t.manualSearch.japaneseBadge}</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.setRowMeta} numberOfLines={1}>
                     {[item.series, item.release_date].filter(Boolean).join(' · ')}
                   </Text>
@@ -301,8 +368,39 @@ const styles = StyleSheet.create({
   pickerLoadingText: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.base },
   pickerPlaceholder: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.base },
   pickerValue: { flex: 1, marginRight: SPACING.sm },
-  pickerName: { color: COLORS.onSurface, fontWeight: '700', fontSize: TYPE.base },
+  pickerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pickerName: { color: COLORS.onSurface, fontWeight: '700', fontSize: TYPE.base, flexShrink: 1 },
   pickerSeries: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.xs, marginTop: 2 },
+  jpBadge: {
+    paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: RADII.pill,
+    backgroundColor: 'rgba(255,230,0,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,230,0,0.5)',
+  },
+  jpBadgeText: {
+    color: COLORS.brand,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  jpWarn: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADII.md,
+    backgroundColor: 'rgba(255,230,0,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,230,0,0.35)',
+  },
+  jpWarnText: {
+    flex: 1,
+    color: COLORS.onSurfaceSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+  },
   errText: { color: COLORS.error, fontSize: TYPE.sm, marginTop: SPACING.md },
   cta: {
     marginTop: SPACING.xl,

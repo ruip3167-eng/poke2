@@ -90,6 +90,8 @@ const pt = {
     loadingSets: 'A carregar coleções…',
     noSets: 'Sem coleções disponíveis. Tenta novamente mais tarde.',
     seriesLabel: 'Série',
+    japaneseBadge: 'Japonês',
+    japaneseWarning: 'Esta é uma coleção japonesa. A API pode não ter preços ao vivo para todas as cartas — se não for encontrada, tenta a versão ocidental "Scarlet & Violet".',
   },
   condition: {
     title: 'Condição',
@@ -261,6 +263,8 @@ const en: typeof pt = {
     loadingSets: 'Loading sets…',
     noSets: 'No sets available. Try again later.',
     seriesLabel: 'Series',
+    japaneseBadge: 'Japanese',
+    japaneseWarning: 'This is a Japanese-only set. The price API may not have live data for every card — if not found, try the western "Scarlet & Violet" variant.',
   },
   condition: {
     title: 'Condition',
