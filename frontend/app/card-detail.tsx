@@ -157,22 +157,31 @@ export default function CardDetailScreen() {
 
   const remove = async () => {
     if (!p.id) return;
+    const idToDelete = p.id;
+    // Fire-and-forget DELETE, then route back immediately so the trash tap
+    // feels instant. The dashboard reads the `deletedId` query param and
+    // filters the row out synchronously.
+    const fireDelete = () => {
+      api.deleteCard(idToDelete).catch((err) => console.log('delete failed', err));
+      router.replace({
+        pathname: '/(tabs)/dashboard',
+        params: { deletedId: idToDelete },
+      });
+    };
+    // Use the native confirm dialog on web (Alert.alert on RN-web maps
+    // multi-button alerts to a single-OK window.alert, swallowing our
+    // destructive callback). On iOS/Android the proper Alert flow runs.
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-alert
+      const ok = typeof window !== 'undefined' && window.confirm
+        ? window.confirm(`${t.detail.removeConfirmTitle}\n\n${t.detail.removeConfirmBody}`)
+        : true;
+      if (ok) fireDelete();
+      return;
+    }
     Alert.alert(t.detail.removeConfirmTitle, t.detail.removeConfirmBody, [
       { text: t.common.cancel, style: 'cancel' },
-      {
-        text: t.common.remove, style: 'destructive', onPress: () => {
-          // Optimistic UX: leave the screen IMMEDIATELY and let the DELETE
-          // run in the background. The dashboard reads the `deletedId` query
-          // param and filters that row out of its local list right away, so
-          // the user never sees a spinner here.
-          const idToDelete = p.id!;
-          api.deleteCard(idToDelete).catch((err) => console.log('delete failed', err));
-          router.replace({
-            pathname: '/(tabs)/dashboard',
-            params: { deletedId: idToDelete },
-          });
-        },
-      },
+      { text: t.common.remove, style: 'destructive', onPress: fireDelete },
     ]);
   };
 

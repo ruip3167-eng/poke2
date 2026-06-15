@@ -63,7 +63,12 @@ export default function DashboardScreen() {
       pendingDeletes.current.delete(deletedIdParam);
     }, 4000);
     // Clear the param so a subsequent tab focus doesn't re-apply it.
-    router.setParams({ deletedId: '' });
+    // Defer past the first paint so an initial-URL load (e.g. browser
+    // refresh on /dashboard?deletedId=X) doesn't try to navigate before
+    // the Root Layout has mounted.
+    queueMicrotask(() => {
+      try { router.setParams({ deletedId: '' }); } catch { /* root not ready */ }
+    });
     return () => clearTimeout(dropAfter);
   }, [deletedIdParam, router]);
 
