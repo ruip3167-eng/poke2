@@ -1,0 +1,49 @@
+{
+  "summary": "Pro-state-reset bug-fix VERIFIED end-to-end. BACKEND (pytest 19/19 passed + 1 vision skipped, 4 NEW tests added in test_pro_state_preservation.py): (1) POST /api/scan/upgrade/{uid} flips is_pro=True and persists via GET. (2) POST /api/scan/count/{uid} increment PRESERVES is_pro=True across 4 consecutive increments — confirming server.py:569 correctly uses $setOnInsert (not $set) for is_pro. (3) POST /api/portfolio/save does NOT touch scan_counters at all: is_pro and count remain identical before/after save. (4) Full user-journey test reproduces the exact bug scenario (5 free scans → upgrade → save card → next increment) and confirms is_pro stays True with count incrementing 5→6. FRONTEND (mobile viewport 390×844, live web preview, Firebase login as testuser+pv@example.com): the scan-counter pill correctly renders 'PRO · Unlimited' after a /api/scan/upgrade is fired and the user returns to /scan via dashboard navigation — proving the new useFocusEffect at scan.tsx:42-50 refetches the counter on every focus and supersedes the stale closure. Tapping testID='scan-shutter' as Pro user keeps URL at /scan (no /paywall redirect), confirming the capture() gate at scan.tsx:86-93 now uses the FRESH `c.is_pro` (proNow) from the just-fetched counter instead of the closure-derived `isPro`. Backend GET after the journey still returns is_pro=true. NO REGRESSIONS in existing 15 tests (root, scan counter, portfolio CRUD, market snapshot fields, price endpoint).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "shadow*/textShadow* (pre-existing, carry-over from iter5)",
+        "issue": "RN-web still warns: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' and '\"textShadow*\" style props are deprecated. Use \"textShadow\".' on first paint. Non-blocking, not introduced by this fix. Reference: /app/frontend/app/(tabs)/dashboard.tsx:416-418 and /app/frontend/app/card-detail.tsx:438,451."
+      },
+      {
+        "component": "expo + react-native-purchases plugin (cosmetic supervisor log noise)",
+        "issue": "supervisor/expo.err.log shows 'Unable to resolve a valid config plugin for react-native-purchases' + 'expo@54.0.33 - expected version: ~54.0.35' on every restart. Web bundling still succeeds so this is non-blocking, but main agent may want to either (a) remove react-native-purchases from any plugin list / use the static SDK only on native, or (b) bump expo to 54.0.35 to silence the version mismatch."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pro_state_preservation.py",
+    "/app/backend/tests/test_pokevalue_api.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/pytest_pro_state.xml",
+    "/tmp/iter6_scan_pro_focus.png",
+    "/tmp/iter6_post_shutter.png"
+  ],
+  "action_items": [
+    "(Optional, low priority) Clean up the react-native-purchases config-plugin warning in expo.err.log and bump expo to 54.0.35 to silence the compatibility notice.",
+    "(Carry-over from iter5) Migrate shadow*/textShadow* RN-web warnings on dashboard.tsx:416-418 and card-detail.tsx:438,451."
+  ],
+  "critical_code_review_comments": [
+    "scan.tsx:42-50 — useFocusEffect now refetches api.getScanCount on every focus. This is the correct fix: it ensures the local scanInfo state is fresh the moment the user returns from /paywall. setActive(true)/return setActive(false) preserves the existing camera lifecycle behaviour. ✅",
+    "scan.tsx:86-93 — capture() now: (a) awaits a fresh api.getScanCount, (b) updates scanInfo, (c) derives proNow = rcAvailable ? rcIsPro : c.is_pro from the FRESH response, (d) gates on proNow (NOT the closure `isPro`). This eliminates the stale-closure race that previously routed Pro users to paywall. ✅",
+    "scan.tsx:66-74 — the legacy one-shot useEffect for initial mount fetch is kept and still useful for the very first paint; harmless duplication with useFocusEffect on initial focus.",
+    "server.py:565-577 — increment_scan_count uses $inc on count, $set on free_limit, and $setOnInsert on is_pro. Critical: is_pro is ONLY initialised on insert, NEVER reset on subsequent increments. Verified across 4 consecutive increments in test_increment_preserves_is_pro_across_multiple_calls. ✅",
+    "server.py:509-535 — save_card writes only to db.cards. No interaction with db.scan_counters whatsoever. Verified in test_save_card_does_not_touch_scan_counters. ✅",
+    "card-detail.tsx:121-156 — Add-to-portfolio path: saveCard → setSavedOk → 600ms → router.replace('/(tabs)/dashboard'). No paywall step in between, no scan-counter mutation. ✅",
+    "card-detail.tsx:129-146 — saveCard payload includes all 5 market-snapshot fields (tcgplayer_market, cardmarket_average, cardmarket_trend, price_source, price_at_creation) and card_id. Backend acceptance verified by TestPortfolioMarketSnapshot. ✅"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pro_state_preservation.py (NEW — 4 targeted regression tests for the Pro-state-reset bug, all passing)"
+  ],
+  "success_rate": { "backend": "100% (19/19 passed, 1 skipped vision)", "frontend": "100% on the 3 critical UI assertions (PRO pill rendering, refocus refetch, shutter does not route to paywall)" },
+  "seed_data_creation": "No persistent seed data created. Test users in test_pro_state_preservation.py use TEST_pro_<random> uids that are upserted into scan_counters by the API itself. Saved portfolio cards are deleted at end of each test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The Pro-state bug-fix is fully validated. For future regression: (1) test_pro_state_preservation.py::test_full_user_journey_paywall_to_save_to_scan is the canonical end-to-end backend test for this bug — run it after ANY change to scan_counters or portfolio/save. (2) For the FE, the smoke test is: login as testuser+pv@example.com / TestPass123! → capture uid from a /api/scan/count network request (or window.evaluate) → POST /api/scan/upgrade/{uid} via fetch → navigate to /dashboard then /scan → assert testID='scan-counter' textContent contains 'PRO'. Firebase auth state on web lives in IndexedDB (not localStorage), so the uid must be extracted from network traffic or via a /api/scan/count fetch interception. (3) The test user's UID is currently ZhopI1m5jeQJr5MBoZbHPXqAFtH3 — its is_pro flag is currently TRUE in MongoDB after this test run; if you need a clean free-tier user, create a new Firebase signup or directly db.scan_counters.deleteOne({user_id: 'ZhopI1m5jeQJr5MBoZbHPXqAFtH3'}). (4) Camera permission must be pre-granted via page.context.grant_permissions(['camera'], origin=...) for the shutter testID to appear; the 'HTMLVideoElement does not have enough camera data' error from playwright's fake video stream is expected and unrelated to the gate logic — the URL assertion is what proves the gate. (5) Run pytest with --tb=short from /app to keep output digestible.",
+  "rca_of_issue": "ORIGINAL BUG: scan.tsx capture() compared a STALE closure value of `isPro` (derived from scanInfo state captured at the previous render) instead of the FRESH `c.is_pro` returned by the GET /api/scan/count call inside capture(). Because the existing useEffect at line 66-74 only fired on `[user]` change (not on focus), navigating Paywall → Dashboard → Scan never re-ran it, so scanInfo stayed frozen at pre-upgrade values (count >= 5, is_pro=false). The Pro user therefore hit the gate `if (!isPro && c.count >= c.free_limit)` and was bounced back to /paywall. FIX: (1) Added useFocusEffect that always calls api.getScanCount on focus and updates scanInfo, so the badge and downstream renders are always fresh. (2) capture() now uses `const proNow = rcAvailable ? rcIsPro : c.is_pro` derived from the just-fetched ScanCount, eliminating the closure entirely. VERIFIED reproducibly on the live web preview: pill flipped 'X free scans left' → 'PRO · Unlimited' immediately upon refocus, and shutter no longer redirects to /paywall after upgrade."
+}

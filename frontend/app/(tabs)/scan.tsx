@@ -34,12 +34,19 @@ export default function ScanScreen() {
   // mock `is_pro` flag from the backend scan counter.
   const isPro = rcAvailable ? rcIsPro : (scanInfo?.is_pro ?? false);
 
-  // pause / resume camera when leaving the tab to free up the sensor
+  // pause / resume camera when leaving the tab to free up the sensor.
+  // ALSO refetch the scan counter on every focus — otherwise after a paywall
+  // upgrade the Pro flag stays stale in this component until the user kills
+  // and reopens the app, which mistakenly re-shows the paywall the next time
+  // they scan.
   useFocusEffect(
     useCallback(() => {
       setActive(true);
+      if (user) {
+        api.getScanCount(user.uid).then(setScanInfo).catch(() => {});
+      }
       return () => setActive(false);
-    }, [])
+    }, [user])
   );
 
   // laser sweep animation
@@ -71,11 +78,15 @@ export default function ScanScreen() {
     setError(null);
 
     // Gate scan access: pro_access entitlement (or mock is_pro) bypasses limit;
-    // otherwise verify backend count < 5.
+    // otherwise verify backend count < 5. CRITICAL: we use the FRESH `c.is_pro`
+    // returned by the backend here (NOT the closure `isPro` derived from the
+    // previous render), so a successful paywall upgrade is honored on the very
+    // next scan without needing a remount or reload.
     try {
       const c = await api.getScanCount(user.uid);
       setScanInfo(c);
-      if (!isPro && c.count >= c.free_limit) {
+      const proNow = rcAvailable ? rcIsPro : c.is_pro;
+      if (!proNow && c.count >= c.free_limit) {
         router.push('/paywall');
         return;
       }
