@@ -14,7 +14,7 @@ import {
   TextInput, FlatList, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { api, type SetSummary } from '@/src/api';
@@ -24,6 +24,20 @@ import { useT } from '@/src/i18n-context';
 export default function ManualSearchScreen() {
   const router = useRouter();
   const t = useT();
+
+  // When opened from /card-detail's "Fix card" CTA we receive the user's
+  // existing condition grade + multiplier so we can drop them straight back
+  // into the detail screen with the new card data + their preserved grading.
+  const params = useLocalSearchParams<{
+    keepCondition?: string;
+    condition_grade?: string;
+    condition_multiplier?: string;
+    condition_json?: string;
+  }>();
+  const keepCondition = params.keepCondition === '1';
+  const existingGrade = params.condition_grade ?? 'Mint';
+  const existingMult = Number(params.condition_multiplier ?? '1') || 1;
+  const existingCondJson = params.condition_json ?? '';
 
   const [sets, setSets] = useState<SetSummary[] | null>(null);
   const [setsError, setSetsError] = useState(false);
@@ -61,15 +75,50 @@ export default function ManualSearchScreen() {
     setSearching(true);
     try {
       const found = await api.findCard({ set_id: selectedSet.id, number: num });
-      // Route into the existing condition flow exactly like scan.tsx does.
-      router.replace({
-        pathname: '/condition',
-        params: {
-          name: found.name,
-          set_name: found.set_name ?? '',
-          number: found.number ?? num,
-        },
-      });
+      if (keepCondition) {
+        // Coming from card-detail "Fix card" flow — reapply the user's
+        // existing condition multiplier to the new market price and drop
+        // them straight back on the detail screen with the corrected data.
+        const apiMarket = found.recommended_eur ?? found.cardmarket_trend
+          ?? found.cardmarket_average ?? found.tcgplayer_market ?? null;
+        const isFallback = apiMarket === null || apiMarket === 0;
+        const market = isFallback ? 100 : (apiMarket as number);
+        const estimated = market * existingMult;
+        router.replace({
+          pathname: '/card-detail',
+          params: {
+            name: found.name,
+            set_name: found.set_name ?? '',
+            number: found.number ?? num,
+            image_url: found.image_url ?? '',
+            market_price: String(market),
+            tcgplayer_market: String(found.tcgplayer_market ?? ''),
+            tcgplayer_holofoil_market: String(found.tcgplayer_holofoil_market ?? ''),
+            tcgplayer_normal_market: String(found.tcgplayer_normal_market ?? ''),
+            cardmarket_average: String(found.cardmarket_average ?? ''),
+            cardmarket_trend: String(found.cardmarket_trend ?? ''),
+            price_source: found.price_source ?? '',
+            estimated_value: String(estimated),
+            condition_grade: existingGrade,
+            condition_multiplier: String(existingMult),
+            condition_json: existingCondJson,
+            mode: 'new',
+            is_fallback_price: isFallback ? '1' : '0',
+            card_id_api: found.card_id ?? '',
+          },
+        });
+      } else {
+        // Default flow (entry from scan tab in older versions): route through
+        // the condition screen so the user can grade the card from scratch.
+        router.replace({
+          pathname: '/condition',
+          params: {
+            name: found.name,
+            set_name: found.set_name ?? '',
+            number: found.number ?? num,
+          },
+        });
+      }
     } catch (e: any) {
       const status = (e as { status?: number })?.status;
       const msg = e?.message ?? '';

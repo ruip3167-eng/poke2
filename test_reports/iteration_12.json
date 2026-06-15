@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only verification of the 'Fix card' UX relocation (scan→detail). All six requested scenarios pass against the live preview: (1) scan.tsx no longer renders testID='scan-manual-cta'; the camera screen shows only the shutter. (2) /card-detail in fallback mode (is_fallback_price=1) renders demo-price-notice with the primary filled neon button detail-fix-card-cta labeled 'Search Manually / Fix Card' and the secondary ghost demo-rescan-cta labeled 'Scan again'. (3) /card-detail in happy mode (mode=new, is_fallback_price=0) shows the discrete neon-yellow detail-fix-card-pill below the live-market section, with the same Fix-Card label. (4) /card-detail in mode='saved' shows neither the fix CTA nor the pill (as required). (5) Direct nav to /manual-search?keepCondition=1&condition_grade=Mint&condition_multiplier=1 → pick set 'Base' + number '4' → Search → router.replace to /card-detail with name=Charizard, set_name=Base, number=4, mode=new, is_fallback_price=0, condition_grade=Mint, condition_multiplier=1, market_price=cardmarket_trend (2690.19) and estimated_value=2690.19 (market × 1). (6) Direct nav to /manual-search without keepCondition routes to /condition (regression preserved). No backend retests performed (per request).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "Playwright run (inline) — covered scan-manual-cta removal, fallback CTA + ghost rescan, happy-mode pill, saved-mode no-pill, keepCondition round-trip to /card-detail, default manual flow to /condition"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "manual-search.tsx keepCondition path passes condition_json='' when caller omits it — fine, but detail save() falls back to a default near_mint condition in that case; behavior is consistent with current code.",
+    "card-detail.tsx fixCardBtn (filled) uses RADII.pill + alignSelf:'stretch' — visually correct as PRIMARY action inside the demo notice; ghost rescan below is alignSelf:'flex-start' with smaller padding, matching the secondary intent."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "skipped",
+    "frontend": "100% (6/6 scenarios)"
+  },
+  "seed_data_creation": "No seed data created. Reused existing Firebase test user testuser+pv@example.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Live preview URL is https://card-scanner-pro-8.preview.emergentagent.com. Firebase login works with testuser+pv@example.com / TestPass123!. /card-detail and /manual-search can be reached via direct URL with query params after login. The scan tab on web preview shows the permission view (no scan-shutter) because the browser denies camera — that is expected and is NOT a regression. Set picker uses testID pattern manual-set-option-{set_id} (e.g. 'manual-set-option-base1' for Base set).",
+  "rca_of_issue": "N/A — implementation matches the spec exactly across all three files (scan.tsx, card-detail.tsx, manual-search.tsx)."
+}

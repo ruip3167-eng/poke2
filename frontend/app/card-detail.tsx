@@ -155,6 +155,18 @@ export default function CardDetailScreen() {
     }
   };
 
+  const openManualFix = () => {
+    router.push({
+      pathname: '/manual-search',
+      params: {
+        keepCondition: '1',
+        condition_grade: p.condition_grade,
+        condition_multiplier: String(mult),
+        condition_json: p.condition_json ?? '',
+      },
+    });
+  };
+
   const remove = async () => {
     if (!p.id) return;
     const idToDelete = p.id;
@@ -362,17 +374,44 @@ export default function CardDetailScreen() {
                 <Text style={[styles.warnText, styles.tipText]}>
                   {t.detail.demoTipRetry}
                 </Text>
+                {/* Two parallel recovery actions: try a better photo OR pick
+                    the card by hand. Manual is the primary CTA (filled) because
+                    after a misidentification, picking the right set+number is
+                    the most reliable path. */}
+                <Pressable
+                  testID="detail-fix-card-cta"
+                  onPress={openManualFix}
+                  style={({ pressed }) => [styles.fixCardBtn, pressed && { opacity: 0.85 }]}
+                >
+                  <Ionicons name="search" size={16} color={COLORS.onBrand} />
+                  <Text style={styles.fixCardBtnText}>{t.detail.fixCard}</Text>
+                </Pressable>
                 <Pressable
                   testID="demo-rescan-cta"
                   onPress={() => router.replace('/(tabs)/scan')}
-                  style={({ pressed }) => [styles.rescanBtn, pressed && { opacity: 0.8 }]}
+                  style={({ pressed }) => [styles.rescanBtnGhost, pressed && { opacity: 0.7 }]}
                 >
-                  <Ionicons name="scan" size={16} color={COLORS.onBrand} />
-                  <Text style={styles.rescanBtnText}>{t.detail.rescanCta}</Text>
+                  <Ionicons name="scan-outline" size={16} color={COLORS.brand} />
+                  <Text style={styles.rescanBtnGhostText}>{t.detail.rescanCta}</Text>
                 </Pressable>
               </View>
             </View>
           </View>
+        )}
+
+        {/* Discrete pill for non-fallback cards: still allows the user to
+            correct an AI misidentification even when the live price IS
+            populated (the card the scanner picked could be the wrong
+            variant). Hidden on already-saved cards. */}
+        {!isFallback && p.mode !== 'saved' && (
+          <Pressable
+            testID="detail-fix-card-pill"
+            onPress={openManualFix}
+            style={({ pressed }) => [styles.fixCardPill, pressed && { opacity: 0.85 }]}
+          >
+            <Ionicons name="search-outline" size={14} color={COLORS.brand} />
+            <Text style={styles.fixCardPillText}>{t.detail.fixCard}</Text>
+          </Pressable>
         )}
 
         {!isFallback && p.price_error && (
@@ -492,6 +531,46 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   rescanBtnText: { color: COLORS.onBrand, fontWeight: '900', fontSize: TYPE.sm, letterSpacing: 0.3 },
+  fixCardBtn: {
+    marginTop: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.brand,
+    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADII.pill,
+    alignSelf: 'stretch',
+  },
+  fixCardBtnText: { color: COLORS.onBrand, fontWeight: '900', fontSize: TYPE.sm, letterSpacing: 0.3 },
+  rescanBtnGhost: {
+    marginTop: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADII.pill,
+    alignSelf: 'flex-start',
+  },
+  rescanBtnGhostText: { color: COLORS.brand, fontWeight: '700', fontSize: 12, letterSpacing: 0.2 },
+  fixCardPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: RADII.pill,
+    backgroundColor: 'rgba(255,230,0,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,230,0,0.35)',
+  },
+  fixCardPillText: { color: COLORS.brand, fontWeight: '700', fontSize: 12, letterSpacing: 0.2 },
   info: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: 'rgba(255,230,0,0.06)', borderColor: 'rgba(255,230,0,0.3)', borderWidth: 1, padding: SPACING.md, borderRadius: RADII.md, marginTop: SPACING.lg },
   infoText: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, flex: 1, lineHeight: 18 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACING.lg, backgroundColor: 'rgba(10,11,14,0.96)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.divider },
