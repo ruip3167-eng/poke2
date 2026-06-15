@@ -257,6 +257,19 @@ export default function ScanScreen() {
           intensity={Platform.OS === 'ios' ? 60 : 0}
           style={styles.bottomBlur}
         >
+          {/* Secondary fallback for cards the AI can't identify (Japanese,
+              old promos, glares, etc.) — Ludex-style manual lookup.
+              Rendered ABOVE the shutter to keep its tap zone clear of the
+              bottom tab bar. */}
+          <Pressable
+            testID="scan-manual-cta"
+            onPress={() => router.push('/manual-search')}
+            style={styles.manualCta}
+            hitSlop={10}
+          >
+            <Ionicons name="search-outline" size={14} color={COLORS.brand} />
+            <Text style={styles.manualCtaText}>{t.scan.manualCta}</Text>
+          </Pressable>
           <Pressable
             testID="scan-shutter"
             style={({ pressed }) => [styles.shutter, pressed && { transform: [{ scale: 0.96 }] }]}
@@ -272,17 +285,6 @@ export default function ScanScreen() {
             </View>
           </Pressable>
           <Text style={styles.shutterLabel}>{scanning ? t.scan.analyzing : t.scan.tapToScan}</Text>
-          {/* Secondary fallback for cards the AI can't identify (Japanese,
-              old promos, glares, etc.) — Ludex-style manual lookup. */}
-          <Pressable
-            testID="scan-manual-cta"
-            onPress={() => router.push('/manual-search')}
-            style={styles.manualCta}
-            hitSlop={8}
-          >
-            <Ionicons name="search-outline" size={14} color={COLORS.brand} />
-            <Text style={styles.manualCtaText}>{t.scan.manualCta}</Text>
-          </Pressable>
         </BlurView>
       </SafeAreaView>
     </View>
@@ -326,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: SPACING.md,
+    marginBottom: SPACING.md,
     paddingHorizontal: SPACING.md,
     paddingVertical: 8,
     borderRadius: RADII.pill,

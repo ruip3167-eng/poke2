@@ -11,7 +11,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(txt || `HTTP ${res.status}`);
+    // Prefix the HTTP status so callers can branch on it (e.g. 404 → "not found"
+    // copy instead of leaking the raw JSON body to the user).
+    const err = new Error(`HTTP ${res.status}: ${txt || res.statusText}`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
   }
   return res.json();
 }

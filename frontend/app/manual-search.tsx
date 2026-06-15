@@ -71,7 +71,9 @@ export default function ManualSearchScreen() {
         },
       });
     } catch (e: any) {
-      setErr(e?.message?.includes('404') ? t.manualSearch.notFound : (e?.message ?? t.manualSearch.notFound));
+      const status = (e as { status?: number })?.status;
+      const msg = e?.message ?? '';
+      setErr(status === 404 || msg.startsWith('HTTP 404') ? t.manualSearch.notFound : (msg || t.manualSearch.notFound));
     } finally {
       setSearching(false);
     }

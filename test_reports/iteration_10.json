@@ -1,0 +1,33 @@
+{
+  "summary": "Retest of the two iter9 regressions on Manual Search — both fixes VERIFIED. (1) scan-manual-cta is now rendered ABOVE the shutter inside the bottom BlurView. On 390x844, Playwright bounding_box reports CTA at y=657..690 and shutter at y=702..790, i.e. CTA sits cleanly above the shutter and well above the tab bar (which starts ~y=796). Tapping [data-testid='scan-manual-cta'] from the Scan tab navigates to /manual-search and the [data-testid='manual-search-screen'] mounts — no more accidental dashboard route. (2) The 404 error path now renders the localized EN string 'No card matched those details.' inside [data-testid='manual-search-error'] when picking base1 + typing '9999' + tapping Search Card — confirmed exact text equality. The raw FastAPI '{\"detail\":\"...\"}' body is no longer leaked. src/api.ts now throws `new Error('HTTP <status>: <body>')` with `.status` attached, and manual-search.tsx catches both status===404 and msg.startsWith('HTTP 404') to fall back to t.manualSearch.notFound. (3) Regression check: /api/sets still loads; the set picker modal opens; typing 'base' in [data-testid='manual-set-search-input'] filters; tapping [data-testid='manual-set-option-base1'] selects 'Base / Base'; the submit button enables; pressing Search Card with number='4' fires /api/cards/find?set_id=base1&number=4 and router.replace navigates to /condition?name=Charizard&set_name=Base&number=4 where 'DETECTED CARD Charizard / Base · 4' renders. No backend retest performed per main agent's instruction (frontend-only). No new RN/Expo deprecation issues introduced.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/tmp/iter10_scan2.png",
+    "/tmp/iter10_ms.png",
+    "/tmp/iter10_err.png",
+    "/tmp/iter10_happy.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "/app/frontend/src/api.ts:7-21 — request() helper now prefixes thrown Error with 'HTTP <status>: <body>' and attaches a numeric `.status` on the Error instance via type widening `(err as Error & { status?: number }).status = res.status`. Clean, type-safe, and lets callers branch on status without parsing the body. ✓",
+    "/app/frontend/app/manual-search.tsx:73-79 — catch block correctly does dual-check: `status === 404 || msg.startsWith('HTTP 404')` falls back to t.manualSearch.notFound; otherwise emits the (now status-prefixed) message or notFound as final fallback. Belt-and-braces — robust. ✓",
+    "/app/frontend/app/(tabs)/scan.tsx:264-272 — manualCta Pressable is now rendered BEFORE the shutter Pressable inside the BlurView, and styles.manualCta:331 uses marginBottom: SPACING.md (was marginTop). Visual order: CTA pill → shutter → 'Tap to scan' label. Confirmed via bounding_box: CTA y=657, shutter y=702 — CTA clears both the shutter and the tab bar. ✓",
+    "No other code changed — fix scope is exactly as described in the agent-to-agent note (two surgical edits)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (skipped per request — no backend changes in this iteration)",
+    "frontend": "100% — both regressions fixed and verified, happy path still working"
+  },
+  "seed_data_creation": "None. Reused existing testuser+pv@example.com Firebase account.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Manual Search feature is fully green: scan-tab → manualCta routes to /manual-search; base1 + 9999 → localized 'No card matched those details.' error; base1 + 4 → /condition?name=Charizard&set_name=Base&number=4. No outstanding bugs from iter9. Future regressions should re-run the same 3 checks (CTA bounding_box above shutter, 404 localized text equality, happy path → /condition).",
+  "rca_of_issue": "Iter9 bug#1 RCA: manualCta was rendered AFTER the shutter inside the BlurView with marginTop, so on 390x844 it ended up at y~779 overlapping the tab bar (y~796) and taps were captured by the Tabs navigator. Fix: re-order JSX so manualCta is before shutter and switch marginTop → marginBottom. Iter9 bug#2 RCA: api.ts threw `new Error(txt)` where txt was the raw FastAPI body ('{\"detail\":\"No card found...\"}'), so the includes('404') check in manual-search never matched and the raw JSON leaked into the UI. Fix: prefix message with 'HTTP <status>: ' and expose a numeric `.status` so callers can branch reliably. Both fixes are minimal and don't affect any other call site (verified by grep of error.includes/startsWith across /app/frontend)."
+}
