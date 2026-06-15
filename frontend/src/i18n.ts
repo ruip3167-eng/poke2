@@ -68,6 +68,7 @@ const pt = {
     freeScansLeft: (n: number) => `${n} scans grátis restantes`,
     captureFailed: 'Captura falhou',
     encodeFailed: 'Não foi possível codificar a imagem',
+    tips: 'Para garantir preços reais ao vivo: 1. Pouse a carta numa superfície plana e bem iluminada (evite reflexos na carta). 2. Alinhe bem a carta dentro da moldura guia. 3. Use cartas oficiais conhecidas (ex: coleções como 151 ou Celebrations).',
   },
   condition: {
     title: 'Condição',
@@ -104,6 +105,8 @@ const pt = {
     sourceTcgOther: (variant: string) => `via TCGplayer ${variant} (USD→EUR)`,
     demoNotice: (market: string) =>
       `Preço demo: esta carta ainda não está no nosso feed ao vivo, por isso usamos um valor de mercado de referência de ${market}.`,
+    demoTipRetry: 'Dica: Tente um novo scan com melhor iluminação, sem reflexos e com a carta bem alinhada na moldura!',
+    rescanCta: 'Refazer scan',
     addToPortfolio: 'Adicionar ao portfólio',
     saved: 'Guardada',
     removeConfirmTitle: 'Remover carta?',
@@ -213,6 +216,7 @@ const en: typeof pt = {
     freeScansLeft: (n: number) => `${n} free scans left`,
     captureFailed: 'Capture failed',
     encodeFailed: 'Could not encode image',
+    tips: 'To ensure live market prices: 1. Place the card on a flat surface with good lighting (avoid reflections). 2. Align the card perfectly within the guide frame. 3. Use well-known official cards (e.g., sets like 151 or Celebrations).',
   },
   condition: {
     title: 'Condition',
@@ -249,6 +253,8 @@ const en: typeof pt = {
     sourceTcgOther: (variant: string) => `via TCGplayer ${variant} (USD→EUR)`,
     demoNotice: (market: string) =>
       `Demo price: this card isn't in our live price feed yet, so we're using a placeholder market value of ${market}.`,
+    demoTipRetry: 'Tip: Try a new scan with better lighting, no reflections, and the card well-aligned within the guide frame!',
+    rescanCta: 'Scan again',
     addToPortfolio: 'Add to portfolio',
     saved: 'Saved',
     removeConfirmTitle: 'Remove card?',

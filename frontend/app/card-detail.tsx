@@ -245,10 +245,25 @@ export default function CardDetailScreen() {
 
         {isFallback && (
           <View style={styles.info} testID="demo-price-notice">
-            <Ionicons name="information-circle-outline" size={16} color={COLORS.brand} />
-            <Text style={styles.warnText} numberOfLines={3}>
-              {t.detail.demoNotice(formatPrice(market))}
-            </Text>
+            <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+              <Ionicons name="information-circle-outline" size={16} color={COLORS.brand} style={{ marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.warnText}>
+                  {t.detail.demoNotice(formatPrice(market))}
+                </Text>
+                <Text style={[styles.warnText, styles.tipText]}>
+                  {t.detail.demoTipRetry}
+                </Text>
+                <Pressable
+                  testID="demo-rescan-cta"
+                  onPress={() => router.replace('/(tabs)/scan')}
+                  style={({ pressed }) => [styles.rescanBtn, pressed && { opacity: 0.8 }]}
+                >
+                  <Ionicons name="scan" size={16} color={COLORS.onBrand} />
+                  <Text style={styles.rescanBtnText}>{t.detail.rescanCta}</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
         )}
 
@@ -344,6 +359,20 @@ const styles = StyleSheet.create({
   marketPrice: { color: COLORS.onSurface, fontSize: TYPE.xl, fontWeight: '900', marginTop: 2 },
   warn: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: 'rgba(245,158,11,0.08)', borderColor: 'rgba(245,158,11,0.3)', borderWidth: 1, padding: SPACING.md, borderRadius: RADII.md, marginTop: SPACING.lg },
   warnText: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, flex: 1, lineHeight: 18 },
+  tipText: { marginTop: SPACING.sm, color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, fontStyle: 'italic' },
+  rescanBtn: {
+    marginTop: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.brand,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADII.pill,
+    alignSelf: 'flex-start',
+  },
+  rescanBtnText: { color: COLORS.onBrand, fontWeight: '900', fontSize: TYPE.sm, letterSpacing: 0.3 },
   info: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: 'rgba(255,230,0,0.06)', borderColor: 'rgba(255,230,0,0.3)', borderWidth: 1, padding: SPACING.md, borderRadius: RADII.md, marginTop: SPACING.lg },
   infoText: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, flex: 1, lineHeight: 18 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACING.lg, backgroundColor: 'rgba(10,11,14,0.96)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.divider },

@@ -234,6 +234,7 @@ export default function ScanScreen() {
             </View>
           </Pressable>
           <Text style={styles.shutterLabel}>{scanning ? t.scan.analyzing : t.scan.tapToScan}</Text>
+          <Text style={styles.tipsText} testID="scan-tips">{t.scan.tips}</Text>
         </BlurView>
       </SafeAreaView>
     </View>
@@ -273,6 +274,16 @@ const styles = StyleSheet.create({
   shutter: { width: 88, height: 88, borderRadius: RADII.pill, backgroundColor: 'rgba(255,230,0,0.25)', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: COLORS.brand },
   shutterInner: { width: 70, height: 70, borderRadius: RADII.pill, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
   shutterLabel: { color: COLORS.onSurfaceSecondary, fontWeight: '700', marginTop: SPACING.sm, fontSize: TYPE.sm, letterSpacing: 0.3 },
+  tipsText: {
+    color: COLORS.onSurfaceTertiary,
+    fontSize: TYPE.xs,
+    lineHeight: 16,
+    textAlign: 'center',
+    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
   permWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl, backgroundColor: COLORS.surface },
   permIcon: { width: 88, height: 88, borderRadius: RADII.pill, backgroundColor: COLORS.brandSoft, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.lg },
   permTitle: { color: COLORS.onSurface, fontSize: TYPE.xl, fontWeight: '800', marginBottom: SPACING.xs },

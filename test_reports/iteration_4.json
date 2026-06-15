@@ -1,0 +1,46 @@
+{
+  "summary": "Frontend-only validation of the small UX polish (i18n scan tips + fallback retry CTA). All four review-request items pass on the public web preview (mobile viewport 390×844). (1) /(tabs)/scan: testID='scan-tips' renders the PT default ('Para garantir preços reais ao vivo: 1. Pouse a carta...') below the 'Toca para digitalizar' shutter label (label.y=714, tips.y=740), and toggling the locale flag from dashboard flips the same testID to the EN copy ('To ensure live market prices: 1. Place the card...'). Both PT and EN strings match /app/frontend/src/i18n.ts:71 and :219 exactly. (2) /card-detail with is_fallback_price=1&name=ThisDoesNotExist&market_price=100: testID='demo-price-notice' now contains BOTH text blocks — demoNotice (\"Demo price: this card isn't in our live price feed yet, so we're using a placeholder market value of 100,00 €.\") AND demoTipRetry (\"Tip: Try a new scan with better lighting, no reflections, and the card well-aligned within the guide frame!\"). testID='demo-rescan-cta' renders as a neon-yellow pill labelled 'Scan again' and, when tapped, routes to /scan. testID='price-source-label' is correctly HIDDEN in this fallback state. (3) /card-detail with price_source=cardmarket_trend&cardmarket_trend=12.5&name=Pikachu: testID='demo-price-notice' is HIDDEN and testID='price-source-label' renders 'via Cardmarket Trend (EUR)' — no regression on the real-price path. Camera permission was granted via Playwright context.grant_permissions so that the main scan-screen body (where tips live) actually mounts on web preview. Pre-existing RN-web warnings (shadow*/textShadow*) remain — out of scope.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "(tabs)/scan",
+        "issues": [
+          "Minor — on a 390×844 viewport the new tipsText (scan.tsx:237) renders just above the bottom tab bar and the last line ('coleções como 151 ou Celebrations.' / 'sets like 151 or Celebrations.') is partially clipped behind the tab strip. Consider increasing bottomBar paddingBottom or reducing tipsText paddingHorizontal/lineHeight, or moving the tips into a small scrollable footer. Visual evidence: /tmp/scan_pt_granted.png, /tmp/scan_en_granted.png. Reference: /app/frontend/app/(tabs)/scan.tsx:273-286."
+        ]
+      }
+    ],
+    "react_native_issues": [
+      {
+        "component": "shadow*/textShadow* (pre-existing, carry-over)",
+        "issue": "RN web still warns: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' and '\"textShadow*\" style props are deprecated. Use \"textShadow\".' Non-blocking. References: /app/frontend/app/card-detail.tsx:346,349 and /app/frontend/app/(tabs)/scan.tsx:264."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_4.json",
+    "/tmp/scan_pt_granted.png",
+    "/tmp/scan_en_granted.png",
+    "/tmp/card_detail_fallback.png",
+    "/tmp/card_detail_real.png"
+  ],
+  "action_items": [
+    "(Optional, minor) Fix the bottom-edge clipping of the new scan-tips text on tall narrow viewports — increase bottomBlur paddingBottom or reduce tipsText padding/lineHeight so the third sentence is fully visible above the tab bar."
+  ],
+  "critical_code_review_comments": [
+    "i18n.ts:71 / :219 — new key scan.tips added under both pt and en, consistent with the typed Dict shape — TypeScript-safe. ✅",
+    "i18n.ts:108-109 / :256-257 — detail.demoTipRetry + detail.rescanCta added under both locales — correct shape. ✅",
+    "scan.tsx:237 — testID='scan-tips' wraps a single <Text> with t.scan.tips inside the BlurView footer, placed AFTER the shutter label as requested. ✅",
+    "card-detail.tsx:246-268 — `isFallback` block now renders the two text rows (demoNotice + demoTipRetry styled italic via styles.tipText at line 362) and a neon-yellow Pressable with testID='demo-rescan-cta' that calls router.replace('/(tabs)/scan'). Using replace (not push) is the right call so the user doesn't end up with a back-stack of stale card-detail screens. ✅",
+    "card-detail.tsx:223-231 — price-source-label remains gated by `!isFallback && priceSource`, so the real-price path is untouched (verified live with cardmarket_trend → 'via Cardmarket Trend (EUR)'). ✅"
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "skipped (frontend-only per request)", "frontend": "100% on all 4 requested items" },
+  "seed_data_creation": "None. Re-used Firebase test user testuser+pv@example.com / TestPass123! from iter_2/iter_3.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All three new i18n keys (scan.tips, detail.demoTipRetry, detail.rescanCta) render correctly in PT and EN. To reach the live scan-screen body on web preview (where testID='scan-tips' lives) you MUST grant camera permission via Playwright: `await context.grant_permissions(['camera'], origin='https://card-scanner-pro-8.preview.emergentagent.com')` before navigating — otherwise the permission gate (testID='scan-permission') is shown instead and scan-tips never mounts. The fallback notice path can be exercised by deep-linking /card-detail?is_fallback_price=1 with arbitrary name/market_price params — no real scan needed. Only nit: the third line of the new tips text gets clipped behind the tab bar on a 390-wide viewport; harmless but worth a 4-line padding tweak.",
+  "rca_of_issue": "N/A — feature additive iteration, no bug being investigated."
+}
