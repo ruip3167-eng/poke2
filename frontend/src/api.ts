@@ -80,6 +80,17 @@ export interface ScanCount {
   is_pro: boolean;
 }
 
+export interface SetSummary {
+  id: string;
+  name: string;
+  series?: string | null;
+  release_date?: string | null;
+  total?: number | null;
+  printed_total?: number | null;
+  symbol_url?: string | null;
+  logo_url?: string | null;
+}
+
 export const api = {
   analyzeImage: (image_base64: string, user_id?: string) =>
     request<ScanResult>('/scan/analyze', {
@@ -92,6 +103,13 @@ export const api = {
     if (params.set_name) q.set('set_name', params.set_name);
     if (params.number) q.set('number', params.number);
     return request<PriceData>(`/price?${q.toString()}`);
+  },
+  listSets: () => request<SetSummary[]>('/sets'),
+  findCard: (params: { set_id: string; number: string }) => {
+    const q = new URLSearchParams();
+    q.set('set_id', params.set_id);
+    q.set('number', params.number);
+    return request<PriceData>(`/cards/find?${q.toString()}`);
   },
   saveCard: (payload: Omit<CardRecord, 'id' | 'created_at'>) =>
     request<CardRecord>('/portfolio/save', {

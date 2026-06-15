@@ -1,0 +1,72 @@
+{
+  "summary": "Manual-search feature tested end-to-end. BACKEND 13/13 PASS (new file /app/backend/tests/test_manual_search.py): GET /api/sets returns 100+ sets newest-first with correct shape, includes 'base1', cached on second hit; GET /api/cards/find?set_id=base1&number=4 returns Charizard with recommended_eur > €2000 (€2690.46 from Cardmarket trend), price_source='cardmarket_trend', and same key-set as /price; 404 on bad number, 404 on bad set, 422 on missing set_id, 400/422 on empty params, '4/102' is normalised to '4'. FRONTEND core flow works: direct nav to /manual-search renders the screen, /api/sets loads ~535ms, picker shows 'Choose a set…', the modal opens with search bar, typing 'base' filters, tapping manual-set-option-base1 closes the modal and the picker shows 'Base / Base', the submit button transitions from aria-disabled='true' to enabled, hitting Search Card fires GET /api/cards/find?set_id=base1&number=4 once and navigates to /condition?name=Charizard&set_name=Base&number=4 where the condition screen renders 'DETECTED CARD Charizard / Base · 4' correctly. TWO FRONTEND BUGS FOUND: (1) CRITICAL — tapping [data-testid='scan-manual-cta'] from the scan tab routes to /dashboard, not /manual-search, because the CTA bounding box (y=779..812 on a 844px viewport) overlaps the bottom tab bar; the click is intercepted by the Portfolio/Scan/Upgrade tab area. The text/icon are visible but the touch target collides with the tab navigator. (2) BUG — the 404 error path renders the raw FastAPI body '{\"detail\":\"No card found in set ...\"}' instead of the localized t.manualSearch.notFound message, because /app/frontend/src/api.ts throws `new Error(txt)` where txt is the JSON body (no '404' substring), so the check `e?.message?.includes('404')` in /app/frontend/app/manual-search.tsx:74 never fires. The deprecated-prop warnings (textShadow*/shadow*/pointerEvents) from earlier iterations still emit — non-blocking carryover.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "scan.tsx manualCta",
+        "issue": "Tapping the 'Not recognized? Search Manually' pill on the scan tab routes to /dashboard instead of /manual-search. The CTA is positioned inside the bottom BlurView but its y-range (779..812 on 844px viewport, bbox confirmed via Playwright bounding_box) overlaps the bottom tab bar; the click is captured by the Tabs navigator. The pill text is partially hidden behind the Portfolio/Scan/Upgrade labels. Reference: /app/frontend/app/(tabs)/scan.tsx:277-286 (manualCta Pressable) and the styles.bottomBlur paddingBottom=SPACING.xxl is insufficient to clear the tab bar.",
+        "testID": "scan-manual-cta",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "manual-search.tsx error handling",
+        "issue": "On a 404 from /api/cards/find, the inline error shows the raw JSON body '{\"detail\":\"No card found in set \\'base1\\' with number \\'9999\\'.\"}' instead of the localized t.manualSearch.notFound = 'No card matched those details.'. Root cause: api.ts:13-14 throws `new Error(txt)` where txt is the raw response body; the response body contains the word 'No' but not '404', so the check `e?.message?.includes('404')` at /app/frontend/app/manual-search.tsx:74 fails and the raw message is rendered. Fix: in /app/frontend/src/api.ts include the HTTP status in the thrown error (e.g. `new Error(`HTTP ${res.status}: ${txt}`)`), or in manual-search.tsx catch any non-200 as notFound, or expose response status on the thrown error.",
+        "testID": "manual-search-error",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "scan",
+        "issues": [
+          "manualCta vertical position collides with the bottom tab bar — even with paddingBottom=SPACING.xxl the pill is rendered at y≈779 while the tab bar starts at y≈796 on the 390×844 viewport, hiding ~half of it and capturing taps. Recommend moving the manualCta ABOVE the shutter (or increasing bottomBlur paddingBottom by ~52px to clear the tab bar) and bumping its hitSlop."
+        ]
+      }
+    ],
+    "react_native_issues": [
+      {
+        "component": "RN-web deprecated style props (carryover, non-blocking)",
+        "issue": "Repeated console warnings on every screen: \"textShadow*\" / \"shadow*\" style props are deprecated; \"props.pointerEvents is deprecated. Use style.pointerEvents\". Already documented in iter5–8. No new occurrences from the manual-search work."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_manual_search.py",
+    "/app/test_reports/pytest/pytest_iter9_manual_search.xml",
+    "/tmp/iter9_scan.png",
+    "/tmp/iter9_ms_loaded.png",
+    "/tmp/iter9_picker.png",
+    "/tmp/iter9_after_search.png",
+    "/tmp/iter9_error_case.png"
+  ],
+  "action_items": [
+    "FIX: Reposition scan-manual-cta so it does not overlap the bottom tab bar — current y≈779 on a 844px viewport is captured by the Tabs navigator. Either move the pill above the shutter, or increase styles.bottomBlur paddingBottom past the tab bar height (~52px), or move the CTA out of the (tabs)/scan.tsx BlurView altogether. Confirmed by Playwright bounding_box that tapping the CTA at its center routes to /dashboard instead of /manual-search.",
+    "FIX: Wire the HTTP status into the error thrown by /app/frontend/src/api.ts so manual-search.tsx can branch on 404. Suggested: `throw new Error(`HTTP ${res.status}: ${txt}`)` in api.ts:13-14. Alternatively in manual-search.tsx catch, simply default to t.manualSearch.notFound for any thrown error from api.findCard() since /cards/find only emits 200/400/404/502.",
+    "(Carryover, low-priority) Migrate textShadow*/shadow*/pointerEvents prop usages to the new style-object equivalents to silence RN-web deprecation warnings."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py:533-566 — /api/sets is correctly implemented: in-process cache with 3600s TTL, 500 page size, ordered by -releaseDate. Cache check uses time.time() comparison, no race conditions for single-process workers.",
+    "/app/backend/server.py:569-635 — _card_to_price_response is a clean extraction of the /price helper logic. Both endpoints now share identical conversion (USD→EUR, variant priority holofoil>normal>other, recommended_eur priority cardmarket_trend>cardmarket_avg>tcgplayer). Response key-set verified identical via test_response_shape_matches_price.",
+    "/app/backend/server.py:638-670 — /api/cards/find correctly normalises '4/102' → '4' via split('/'), raises 400 on missing set_id or number after strip, and 404 with a clear detail string. Note: when FastAPI receives `set_id=''` as a query param it accepts the empty string (returns 400 from app logic); missing entirely returns 422 (FastAPI default). Spec wanted 400 for both but 422 is acceptable per HTTP semantics.",
+    "/app/frontend/src/api.ts:107-113 — listSets() + findCard() are well-typed. SetSummary mirrors the backend shape. Minor: the request() helper at line 12-15 should bake the HTTP status code into the thrown Error so callers can branch on it (currently only the raw body is thrown).",
+    "/app/frontend/app/manual-search.tsx:37-43 — useEffect cleanup correctly cancels the setSets/setSetsError updates on unmount. Memoized filtering on lines 45-54 is fine.",
+    "/app/frontend/app/manual-search.tsx:74 — error branching `e?.message?.includes('404')` is fragile: the thrown Error message is the response body, not the status. Either expose status on the error or default to notFound for all api.findCard() throws.",
+    "/app/frontend/app/manual-search.tsx:56-78 — onSearch uses router.replace() which is correct for a modal (keeps the back-stack clean). Routes with name/set_name/number params match what scan.tsx pushes — downstream condition screen unchanged. ✓",
+    "/app/frontend/app/(tabs)/scan.tsx:277-286 — manualCta Pressable correctly calls router.push('/manual-search'). The bug is purely visual/layout: paddingBottom=SPACING.xxl on bottomBlur is insufficient on small viewports to clear the bottom Tabs bar, so the CTA's hit-area overlaps the tab navigator. Fix is one-line padding change or move the pill above the shutter.",
+    "/app/frontend/app/_layout.tsx:53-56 — manual-search registered as a modal (presentation='modal', animation='slide_from_bottom'). Confirmed: cmd-Tap on the screen renders as a modal sheet with a close (×) button in the header. ✓",
+    "/app/frontend/src/i18n.ts:75-93 + 244-262 — both PT and EN dictionaries contain manualCta + manualSearch.{title, subtitle, setLabel, setPlaceholder, setSearchPlaceholder, numberLabel, numberPlaceholder, search, searching, notFound, pickSetFirst, enterNumber, loadingSets, noSets, seriesLabel}. Typescript-enforced shape match via Dict type — verified no missing keys."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_manual_search.py (NEW — 13 tests, all PASS)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 new manual-search tests pass)",
+    "frontend": "80% — core manual-search flow works (sets load, picker filter, set selection, /api/cards/find call, navigation to /condition with correct params, error path triggers error UI). 2 bugs: scan-manual-cta tap is captured by tab bar (routes to /dashboard); 404 path shows raw JSON body instead of localized message."
+  },
+  "seed_data_creation": "None. Reused existing testuser+pv@example.com account. Backend tests are read-only against pokemontcg.io.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "After main agent fixes the 2 bugs, retest: (1) Tap [data-testid='scan-manual-cta'] from /scan and assert page.url ends with '/manual-search' (Playwright bounding_box should now sit ABOVE the tab bar — y < ~780 on 844px viewport). (2) On /manual-search pick base1 + type '9999' + tap Search Card; assert [data-testid='manual-search-error'] text exactly equals t.manualSearch.notFound = 'No card matched those details.' (EN) or 'Não foi encontrada nenhuma carta com esses dados.' (PT). The happy path (base1 + '4' → /condition?name=Charizard&set_name=Base&number=4) is already verified working in this iteration so no need to re-run unless the fix touches manual-search.tsx onSearch."
+}

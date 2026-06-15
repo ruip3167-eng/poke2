@@ -506,6 +506,170 @@ async def price(name: str, set_name: Optional[str] = None, number: Optional[str]
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Manual card lookup — used by the Ludex-style "search manually" flow when
+# the AI scanner can't recognise the card. The user picks a set from a
+# dropdown + types the card number; we resolve to the same PriceResponse
+# shape so the rest of the app (condition.tsx, card-detail.tsx) needs no
+# changes.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class SetSummary(BaseModel):
+    id: str
+    name: str
+    series: Optional[str] = None
+    release_date: Optional[str] = None
+    total: Optional[int] = None
+    printed_total: Optional[int] = None
+    symbol_url: Optional[str] = None
+    logo_url: Optional[str] = None
+
+
+# Lightweight in-process cache for /sets (the upstream list rarely changes).
+_SETS_CACHE: dict = {"data": None, "expires_at": 0.0}
+
+
+@api.get("/sets", response_model=List[SetSummary])
+async def list_sets():
+    """Return every Pokémon TCG set, newest release first, for the manual
+    picker. Cached in-process for an hour to spare pokemontcg.io."""
+    import time
+    now = time.time()
+    if _SETS_CACHE["data"] is not None and _SETS_CACHE["expires_at"] > now:
+        return _SETS_CACHE["data"]
+
+    url = "https://api.pokemontcg.io/v2/sets"
+    try:
+        async with httpx.AsyncClient(timeout=20) as http:
+            r = await http.get(url, params={"pageSize": 500, "orderBy": "-releaseDate"})
+            r.raise_for_status()
+            payload = r.json() or {}
+    except Exception as e:
+        logger.exception("pokemontcg.io /sets failed")
+        raise HTTPException(502, f"Sets API error: {e}")
+
+    out: List[SetSummary] = []
+    for s in payload.get("data") or []:
+        out.append(SetSummary(
+            id=s.get("id") or "",
+            name=s.get("name") or "",
+            series=s.get("series"),
+            release_date=s.get("releaseDate"),
+            total=s.get("total"),
+            printed_total=s.get("printedTotal"),
+            symbol_url=((s.get("images") or {}).get("symbol")),
+            logo_url=((s.get("images") or {}).get("logo")),
+        ))
+    _SETS_CACHE["data"] = out
+    _SETS_CACHE["expires_at"] = now + 3600  # 1h TTL
+    return out
+
+
+def _card_to_price_response(card: dict) -> PriceResponse:
+    """Convert a raw pokemontcg.io card record into our PriceResponse.
+
+    Shared by both `/price` and `/cards/find` so the manual-search flow
+    produces identical fields to the scanner flow.
+    """
+    USD_TO_EUR = 0.92
+    tcg = ((card.get("tcgplayer") or {}).get("prices") or {})
+
+    def _pick(variant_dict: dict) -> Optional[float]:
+        if not isinstance(variant_dict, dict):
+            return None
+        return variant_dict.get("market") or variant_dict.get("mid")
+
+    def _usd_to_eur(v: Optional[float]) -> Optional[float]:
+        return round(float(v) * USD_TO_EUR, 2) if v else None
+
+    tcg_holo_eur = _usd_to_eur(_pick(tcg.get("holofoil") or {}))
+    tcg_norm_eur = _usd_to_eur(_pick(tcg.get("normal") or {}))
+
+    tcg_market_eur: Optional[float] = None
+    tcg_variant: Optional[str] = None
+    if tcg_holo_eur is not None:
+        tcg_market_eur, tcg_variant = tcg_holo_eur, "holofoil"
+    elif tcg_norm_eur is not None:
+        tcg_market_eur, tcg_variant = tcg_norm_eur, "normal"
+    else:
+        for variant_key, variant in tcg.items():
+            v = _pick(variant)
+            if v:
+                tcg_market_eur, tcg_variant = _usd_to_eur(v), str(variant_key)
+                break
+
+    cm = (card.get("cardmarket") or {}).get("prices") or {}
+    cm_trend = cm.get("trendPrice")
+    cm_avg = cm.get("averageSellPrice") or cm.get("avg30")
+    cm_trend_f = float(cm_trend) if cm_trend else None
+    cm_avg_f = float(cm_avg) if cm_avg else None
+
+    recommended_eur: Optional[float] = None
+    price_source: Optional[str] = None
+    if cm_trend_f and cm_trend_f > 0:
+        recommended_eur, price_source = cm_trend_f, "cardmarket_trend"
+    elif cm_avg_f and cm_avg_f > 0:
+        recommended_eur, price_source = cm_avg_f, "cardmarket_avg"
+    elif tcg_market_eur and tcg_market_eur > 0:
+        recommended_eur = tcg_market_eur
+        price_source = f"tcgplayer_{tcg_variant}" if tcg_variant else "tcgplayer_other"
+
+    return PriceResponse(
+        card_id=card.get("id"),
+        name=card.get("name") or "",
+        set_name=(card.get("set") or {}).get("name"),
+        number=card.get("number"),
+        image_url=((card.get("images") or {}).get("large")
+                   or (card.get("images") or {}).get("small")),
+        tcgplayer_market=tcg_market_eur,
+        tcgplayer_holofoil_market=tcg_holo_eur,
+        tcgplayer_normal_market=tcg_norm_eur,
+        tcgplayer_variant=tcg_variant,
+        cardmarket_average=cm_avg_f,
+        cardmarket_trend=cm_trend_f,
+        recommended_eur=recommended_eur,
+        price_source=price_source,
+        usd_to_eur_rate=USD_TO_EUR,
+        currency="EUR",
+    )
+
+
+@api.get("/cards/find", response_model=PriceResponse)
+async def find_card(set_id: str, number: str):
+    """Look up a single card by *set id* + *card number*.
+
+    This is the manual-search backend: the user has picked a set from the
+    dropdown and typed the number printed on the card, so we don't need
+    AI vision — just a deterministic API hit.
+
+    Returns the same PriceResponse shape as /price so the downstream flow
+    (condition.tsx + card-detail.tsx) is identical to a scanned card.
+    """
+    num_clean = number.split("/")[0].strip()
+    if not set_id or not num_clean:
+        raise HTTPException(400, "Both set_id and number are required.")
+
+    url = "https://api.pokemontcg.io/v2/cards"
+    try:
+        async with httpx.AsyncClient(timeout=20) as http:
+            r = await http.get(url, params={"q": f'set.id:{set_id} number:{num_clean}', "pageSize": 5})
+            if r.status_code != 200:
+                raise HTTPException(502, f"Card lookup HTTP {r.status_code}")
+            data = r.json() or {}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("pokemontcg.io /cards/find failed")
+        raise HTTPException(502, f"Card lookup error: {e}")
+
+    cards = data.get("data") or []
+    if not cards:
+        raise HTTPException(404, f"No card found in set '{set_id}' with number '{num_clean}'.")
+
+    return _card_to_price_response(cards[0])
+
+
 @api.post("/portfolio/save", response_model=CardRecord)
 async def save_card(req: SaveCardRequest):
     rec = CardRecord(
