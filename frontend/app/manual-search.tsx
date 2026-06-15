@@ -16,8 +16,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
-import { api, type SetSummary } from '@/src/api';
+import { api, type PriceData, type SetSummary } from '@/src/api';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { useT } from '@/src/i18n-context';
 
@@ -42,7 +43,11 @@ export default function ManualSearchScreen() {
   const [sets, setSets] = useState<SetSummary[] | null>(null);
   const [setsError, setSetsError] = useState(false);
   const [selectedSet, setSelectedSet] = useState<SetSummary | null>(null);
-  const [number, setNumber] = useState('');
+  // Free-text input: partial Pokémon name. Wildcarded server-side so 'chari'
+  // matches Charizard/Charmander/etc. Replaces the brittle card-number
+  // input which failed JP↔EN numbering mismatches.
+  const [pokeName, setPokeName] = useState('');
+  const [results, setResults] = useState<PriceData[] | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -122,61 +127,70 @@ export default function ManualSearchScreen() {
   const onSearch = async () => {
     setErr(null);
     if (!selectedSet) { setErr(t.manualSearch.pickSetFirst); return; }
-    const num = number.trim();
-    if (!num) { setErr(t.manualSearch.enterNumber); return; }
+    const n = pokeName.trim();
+    if (!n) { setErr(t.manualSearch.enterNumber); return; }
     setSearching(true);
+    setResults(null);
     try {
-      const found = await api.findCard({ set_id: selectedSet.id, number: num });
-      if (keepCondition) {
-        // Coming from card-detail "Fix card" flow — reapply the user's
-        // existing condition multiplier to the new market price and drop
-        // them straight back on the detail screen with the corrected data.
-        const apiMarket = found.recommended_eur ?? found.cardmarket_trend
-          ?? found.cardmarket_average ?? found.tcgplayer_market ?? null;
-        const isFallback = apiMarket === null || apiMarket === 0;
-        const market = isFallback ? 100 : (apiMarket as number);
-        const estimated = market * existingMult;
-        router.replace({
-          pathname: '/card-detail',
-          params: {
-            name: found.name,
-            set_name: found.set_name ?? '',
-            number: found.number ?? num,
-            image_url: found.image_url ?? '',
-            market_price: String(market),
-            tcgplayer_market: String(found.tcgplayer_market ?? ''),
-            tcgplayer_holofoil_market: String(found.tcgplayer_holofoil_market ?? ''),
-            tcgplayer_normal_market: String(found.tcgplayer_normal_market ?? ''),
-            cardmarket_average: String(found.cardmarket_average ?? ''),
-            cardmarket_trend: String(found.cardmarket_trend ?? ''),
-            price_source: found.price_source ?? '',
-            estimated_value: String(estimated),
-            condition_grade: existingGrade,
-            condition_multiplier: String(existingMult),
-            condition_json: existingCondJson,
-            mode: 'new',
-            is_fallback_price: isFallback ? '1' : '0',
-            card_id_api: found.card_id ?? '',
-          },
-        });
-      } else {
-        // Default flow (entry from scan tab in older versions): route through
-        // the condition screen so the user can grade the card from scratch.
-        router.replace({
-          pathname: '/condition',
-          params: {
-            name: found.name,
-            set_name: found.set_name ?? '',
-            number: found.number ?? num,
-          },
-        });
-      }
+      const found = await api.searchCards({ set_id: selectedSet.id, name: n });
+      setResults(found);
     } catch (e: any) {
       const status = (e as { status?: number })?.status;
       const msg = e?.message ?? '';
       setErr(status === 404 || msg.startsWith('HTTP 404') ? t.manualSearch.notFound : (msg || t.manualSearch.notFound));
     } finally {
       setSearching(false);
+    }
+  };
+
+  /**
+   * One of the result thumbnails was tapped — route to /card-detail using
+   * the FULL PriceData we already have (no second backend round-trip).
+   */
+  const pickResult = (found: PriceData) => {
+    const apiMarket = found.recommended_eur ?? found.cardmarket_trend
+      ?? found.cardmarket_average ?? found.tcgplayer_market ?? null;
+    const isFallback = apiMarket === null || apiMarket === 0;
+    const market = isFallback ? 100 : (apiMarket as number);
+
+    if (keepCondition) {
+      // From card-detail "Fix card" — keep grade + multiplier, hop directly
+      // back to /card-detail with the new market data.
+      const estimated = market * existingMult;
+      router.replace({
+        pathname: '/card-detail',
+        params: {
+          name: found.name,
+          set_name: found.set_name ?? '',
+          number: found.number ?? '',
+          image_url: found.image_url ?? '',
+          market_price: String(market),
+          tcgplayer_market: String(found.tcgplayer_market ?? ''),
+          tcgplayer_holofoil_market: String(found.tcgplayer_holofoil_market ?? ''),
+          tcgplayer_normal_market: String(found.tcgplayer_normal_market ?? ''),
+          cardmarket_average: String(found.cardmarket_average ?? ''),
+          cardmarket_trend: String(found.cardmarket_trend ?? ''),
+          price_source: found.price_source ?? '',
+          estimated_value: String(estimated),
+          condition_grade: existingGrade,
+          condition_multiplier: String(existingMult),
+          condition_json: existingCondJson,
+          mode: 'new',
+          is_fallback_price: isFallback ? '1' : '0',
+          card_id_api: found.card_id ?? '',
+        },
+      });
+    } else {
+      // Fresh entry from the scanner fallback — go through the grading
+      // screen first so the user can dial in centering / corners / etc.
+      router.replace({
+        pathname: '/condition',
+        params: {
+          name: found.name,
+          set_name: found.set_name ?? '',
+          number: found.number ?? '',
+        },
+      });
     }
   };
 
@@ -238,19 +252,19 @@ export default function ManualSearchScreen() {
           </View>
         )}
 
-        {/* Number input */}
+        {/* Pokémon name input — partial matching (wildcarded server-side) */}
         <Text style={[styles.label, { marginTop: SPACING.lg }]}>{t.manualSearch.numberLabel}</Text>
         <TextInput
           testID="manual-number-input"
-          value={number}
-          onChangeText={setNumber}
+          value={pokeName}
+          onChangeText={setPokeName}
           placeholder={t.manualSearch.numberPlaceholder}
           placeholderTextColor={COLORS.onSurfaceTertiary}
           style={styles.input}
           keyboardType="default"
           returnKeyType="search"
           onSubmitEditing={onSearch}
-          autoCapitalize="none"
+          autoCapitalize="words"
           autoCorrect={false}
         />
 
@@ -274,6 +288,38 @@ export default function ManualSearchScreen() {
             </View>
           )}
         </Pressable>
+
+        {/* Results grid. Rendered as a 2-column tile gallery so the user can
+            visually disambiguate variants (normal vs ultra-rare, full-art,
+            secret rare, etc) of the same Pokémon within a single set. */}
+        {results && results.length > 0 && (
+          <View style={styles.resultsBlock} testID="manual-results">
+            <Text style={styles.resultsTitle}>{t.manualSearch.resultsTitle(results.length)}</Text>
+            <View style={styles.resultsGrid}>
+              {results.map((card) => (
+                <Pressable
+                  key={card.card_id ?? `${card.name}-${card.number}`}
+                  testID={`manual-result-${card.card_id ?? card.number ?? card.name}`}
+                  onPress={() => pickResult(card)}
+                  style={({ pressed }) => [styles.resultTile, pressed && { opacity: 0.85 }]}
+                >
+                  {card.image_url ? (
+                    <Image source={{ uri: card.image_url }} style={styles.resultImg} contentFit="contain" />
+                  ) : (
+                    <View style={[styles.resultImg, styles.resultImgPh]}>
+                      <Ionicons name="image-outline" size={24} color={COLORS.onSurfaceTertiary} />
+                    </View>
+                  )}
+                  <Text style={styles.resultName} numberOfLines={1}>{card.name}</Text>
+                  <Text style={styles.resultMeta} numberOfLines={1}>
+                    #{card.number ?? '—'}
+                    {card.recommended_eur ? ` · €${card.recommended_eur.toFixed(2)}` : ''}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {/* Set picker modal */}
@@ -417,6 +463,45 @@ const styles = StyleSheet.create({
   },
   ctaInner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   ctaText: { color: COLORS.onBrand, fontWeight: '900', fontSize: TYPE.base, letterSpacing: 0.3 },
+  resultsBlock: { marginTop: SPACING.xl },
+  resultsTitle: {
+    color: COLORS.onSurfaceSecondary,
+    fontSize: TYPE.sm,
+    fontWeight: '700',
+    marginBottom: SPACING.md,
+    letterSpacing: 0.3,
+  },
+  resultsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -SPACING.xs,
+  },
+  resultTile: {
+    width: '50%',
+    paddingHorizontal: SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  resultImg: {
+    width: '100%',
+    aspectRatio: 0.72,
+    borderRadius: RADII.md,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  resultImgPh: { alignItems: 'center', justifyContent: 'center' },
+  resultName: {
+    color: COLORS.onSurface,
+    fontWeight: '700',
+    fontSize: TYPE.sm,
+    marginTop: SPACING.sm,
+  },
+  resultMeta: {
+    color: COLORS.brand,
+    fontSize: TYPE.xs,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   // Modal
   modalRoot: { flex: 1, backgroundColor: COLORS.surface },
   modalHeader: {

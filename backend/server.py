@@ -670,6 +670,45 @@ async def find_card(set_id: str, number: str):
     return _card_to_price_response(cards[0])
 
 
+@api.get("/cards/search", response_model=List[PriceResponse])
+async def search_cards(set_id: str, name: str):
+    """Search a set by partial Pokémon name.
+
+    Used by the manual-search screen when the user doesn't know the card
+    number (e.g. JP / EN numbering differs). We wrap the name in wildcards
+    so 'chari' matches 'Charizard', 'Charizard ex', 'Charmander', etc.
+
+    Returns up to 30 cards, ordered by number ascending so visual scanning
+    matches the binder order. Each entry is a FULL PriceResponse so the
+    frontend can route directly to /card-detail without a second round-trip.
+    """
+    name_clean = name.strip()
+    if not set_id or not name_clean:
+        raise HTTPException(400, "Both set_id and name are required.")
+
+    # pokemontcg.io query: combine set.id (opaque ASCII, no encoding hell)
+    # with a wildcarded name match. Quotes around the wildcarded term keep
+    # multi-word names like "Mr. Mime" tokenising correctly.
+    q = f'set.id:{set_id} name:"*{name_clean}*"'
+    url = "https://api.pokemontcg.io/v2/cards"
+    try:
+        async with httpx.AsyncClient(timeout=20) as http:
+            r = await http.get(url, params={"q": q, "pageSize": 30, "orderBy": "number"})
+            if r.status_code != 200:
+                raise HTTPException(502, f"Card search HTTP {r.status_code}")
+            data = r.json() or {}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("pokemontcg.io /cards/search failed")
+        raise HTTPException(502, f"Card search error: {e}")
+
+    cards = data.get("data") or []
+    if not cards:
+        raise HTTPException(404, f"No '{name_clean}' cards found in set '{set_id}'.")
+    return [_card_to_price_response(c) for c in cards]
+
+
 @api.post("/portfolio/save", response_model=CardRecord)
 async def save_card(req: SaveCardRequest):
     rec = CardRecord(

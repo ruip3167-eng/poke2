@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 14 — Manual search switched from card-number to partial-name lookup. Backend: 11/12 spec-driven pytest tests pass against the live preview; 12/12 after adjusting one inaccurate spec assertion (sv1+pikachu returns 404 because pokemontcg.io has zero Pikachu cards in Scarlet & Violet Base — verified upstream). New endpoint GET /api/cards/search verified for: chari/sv3pt5 (6 results in exact spec order: Charizard ex #6, Giovanni's Charisma #161, Charizard ex #183, Giovanni's Charisma #197, Charizard ex #199, Giovanni's Charisma #204, ordered numeric-ascending); 404 with detail mentioning the name on no match; 400 on empty set_id/name; 422 on missing query params; full PriceResponse shape on each entry. Non-regression for /api/cards/find (sv1+199 → Tarountula €5.62), /api/price (Pikachu) and /api/sets (>100 sets, base1 present) all still pass. Frontend: Playwright run on mobile viewport (390×844) after Firebase login as testuser+pv@example.com. (a) /manual-search renders the new label (POKÉMON NAME) and placeholder 'e.g. Pikachu, Charizard, Tarountula'; testID manual-number-input preserved. (b) Set picker pinned-set order verified: first 5 rows are manual-set-option-{sv1, sv1s, sv1v, sv3pt5, sv3} — no regression vs iter_13. (c) Happy path Pokémon 151 + 'chari' → manual-results grid renders with 6 tiles; each tile shows the card art (expo-image), the name, and '#NUMBER · €PRICE'; testIDs follow manual-result-sv3pt5-{6,161,183,197,199,204} in the spec order. (d) Default mode: tapping manual-result-sv3pt5-6 router.replaces to /condition?name=Charizard%20ex&set_name=151&number=6 (verified URL). (e) keepCondition=1 mode with condition_grade=Near Mint & multiplier=0.9: tapping manual-result-sv3pt5-183 router.replaces to /card-detail with full market data (market_price=39.14, cardmarket_trend=39.14, price_source=cardmarket_trend, estimated_value=35.226, condition_grade=Near Mint, condition_multiplier=0.9, mode=new, is_fallback_price=0, card_id_api=sv3pt5-183) — exactly as designed. (f) No-match flow: sv1 + 'zzzzzz' → 404 → inline testID=manual-search-error 'No card matched those details.', no grid rendered, no crash, screen remains on /manual-search.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/cards/search?set_id=sv1&name=pikachu", "issue": "Spec says this returns >=1 Pikachu; pokemontcg.io actually has 0 Pikachu cards in sv1 (totalCount=0 confirmed via direct upstream query). Endpoint correctly returns 404 with detail 'No pikachu cards found in set sv1.' — this is a spec inaccuracy, not a backend bug. Pikachu name-search works correctly in sv3pt5 (2 hits: #25, #173)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cards_search.py",
+    "/app/test_reports/pytest/pytest_iter14_cards_search.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py search_cards: q='set.id:{id} name:\"*{name}*\"' with pageSize=30 orderBy=number — clean, matches spec. Validation correctly raises 400 on empty set_id or name, 404 when upstream returns no data.",
+    "server.py _card_to_price_response: duplicate logic vs /price route was already extracted in iter_13 — reused by both /cards/find and /cards/search, no DRY violation.",
+    "manual-search.tsx: keepCondition branch correctly moved inside pickResult() (per agent note). Logic mirrors the previous onSearch behaviour: estimated = market * existingMult, preserves condition_grade/multiplier/json on the way to /card-detail. is_fallback_price=0 when API returned a real price.",
+    "manual-search.tsx: results grid uses width:'50%' tiles with aspectRatio 0.72 (standard TCG portrait ratio) — visually correct. expo-image is used for thumbnails which handles caching automatically.",
+    "manual-search.tsx: label key is still numberLabel (now translated to 'Pokémon name' / 'Nome do Pokémon') and placeholder key is numberPlaceholder. Renaming the keys would be cleaner but is non-functional; flag for future cleanup, not blocking.",
+    "API layer api.searchCards returns PriceData[] — TypeScript types match backend List[PriceResponse]. No type drift.",
+    "Pinned-set order (sv1, sv1s, sv1v, sv3pt5, sv3) matches iter_13 contract — no picker regression."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cards_search.py (new file — 12 tests for the new endpoint + non-regression for /cards/find, /price, /sets)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 pytest)",
+    "frontend": "100% (7/7 scenarios — label/placeholder, pinned-order, happy path grid, default→/condition, keepCondition→/card-detail, no-match inline error, no crash)"
+  },
+  "seed_data_creation": "No seed data created. Reused Firebase test user testuser+pv@example.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend live URL: https://card-scanner-pro-8.preview.emergentagent.com. New endpoint is GET /api/cards/search?set_id=<id>&name=<partial> returning List[PriceResponse]; pytest covers it in /app/backend/tests/test_cards_search.py. Frontend manual-search.tsx now shows a 2-col grid (testID manual-results) of tiles (manual-result-<card_id>). Tapping a tile in default mode routes to /condition; with keepCondition=1 query param it routes to /card-detail directly. The input testID is still manual-number-input even though it now holds a Pokémon name (kept for backward test compatibility — confirmed in spec). Be aware: when testing the picker on mobile-web viewport, FlatList items beyond row ~3 may be reported as 'outside viewport' by Playwright's strict viewport check — use page.evaluate scrollIntoView+click as a fallback (sv3pt5 is at index 3).",
+  "rca_of_issue": "N/A — feature works as designed end-to-end. The only test divergence (sv1+pikachu) is a real upstream data gap on pokemontcg.io, not a regression in our code."
+}

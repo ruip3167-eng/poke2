@@ -115,6 +115,12 @@ export const api = {
     q.set('number', params.number);
     return request<PriceData>(`/cards/find?${q.toString()}`);
   },
+  searchCards: (params: { set_id: string; name: string }) => {
+    const q = new URLSearchParams();
+    q.set('set_id', params.set_id);
+    q.set('name', params.name);
+    return request<PriceData[]>(`/cards/search?${q.toString()}`);
+  },
   saveCard: (payload: Omit<CardRecord, 'id' | 'created_at'>) =>
     request<CardRecord>('/portfolio/save', {
       method: 'POST',
