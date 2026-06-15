@@ -15,6 +15,7 @@ import { useRevenueCat } from '@/src/revenuecat-context';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 import { scanStore } from '@/src/scan-store';
 import { useT } from '@/src/i18n-context';
+import { proStore, useIsPro } from '@/src/pro-store';
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -29,21 +30,40 @@ export default function ScanScreen() {
   const [scanInfo, setScanInfo] = useState<{ count: number; free_limit: number; is_pro: boolean } | null>(null);
   const [active, setActive] = useState(true);
 
-  // Effective Pro status: prefer the RevenueCat `pro_access` entitlement when
-  // the SDK is available (native build). In Expo Go / web fallback, read the
-  // mock `is_pro` flag from the backend scan counter.
-  const isPro = rcAvailable ? rcIsPro : (scanInfo?.is_pro ?? false);
+  // Synchronous Pro flag from the global in-memory store. This NEVER
+  // flickers to false during a save / delete / refocus because nothing
+  // outside of paywall.tsx and the auth bootstrap can downgrade it.
+  const proFromStore = useIsPro();
+  // Effective Pro = global flag (mock + persisted) OR live RevenueCat
+  // entitlement (when the native module is available). Pro is sticky:
+  // once true it stays true for the whole session.
+  const isPro = proFromStore || (rcAvailable && rcIsPro);
+
+  // Mirror the RevenueCat entitlement into the store the moment it flips
+  // to true. We never downgrade based on RC here either — RC has its own
+  // listener for cancellations / refunds and the auth-context handles
+  // logout via proStore.reset().
+  useEffect(() => {
+    if (rcAvailable && rcIsPro && !proStore.get()) {
+      proStore.setPro(true);
+    }
+  }, [rcAvailable, rcIsPro]);
 
   // pause / resume camera when leaving the tab to free up the sensor.
-  // ALSO refetch the scan counter on every focus — otherwise after a paywall
-  // upgrade the Pro flag stays stale in this component until the user kills
-  // and reopens the app, which mistakenly re-shows the paywall the next time
-  // they scan.
+  // We still refresh `scanInfo` (count badge) on focus — but Pro status
+  // is read synchronously from `proStore`, NOT from this fetch, so the
+  // bottom badge "Free scans left" only flickers, never the gate itself.
   useFocusEffect(
     useCallback(() => {
       setActive(true);
       if (user) {
-        api.getScanCount(user.uid).then(setScanInfo).catch(() => {});
+        api.getScanCount(user.uid)
+          .then((c) => {
+            setScanInfo(c);
+            // Upgrade-only sync: never downgrade Pro from the count fetch.
+            if (c.is_pro) proStore.setPro(true);
+          })
+          .catch(() => {});
       }
       return () => setActive(false);
     }, [user])
@@ -77,20 +97,27 @@ export default function ScanScreen() {
     if (!cameraRef.current || scanning || !user) return;
     setError(null);
 
-    // Gate scan access: pro_access entitlement (or mock is_pro) bypasses limit;
-    // otherwise verify backend count < 5. CRITICAL: we use the FRESH `c.is_pro`
-    // returned by the backend here (NOT the closure `isPro` derived from the
-    // previous render), so a successful paywall upgrade is honored on the very
-    // next scan without needing a remount or reload.
-    try {
-      const c = await api.getScanCount(user.uid);
-      setScanInfo(c);
-      const proNow = rcAvailable ? rcIsPro : c.is_pro;
-      if (!proNow && c.count >= c.free_limit) {
-        router.push('/paywall');
-        return;
+    // Gate scan access: read the synchronous in-memory Pro flag. No
+    // network round-trip, no closure-stale risk — the store is the single
+    // source of truth and only the paywall confirm path can flip it.
+    // For free users, also verify backend count < 5 (best-effort fetch).
+    if (!proStore.get()) {
+      try {
+        const c = await api.getScanCount(user.uid);
+        setScanInfo(c);
+        // Backend may have flipped us to Pro asynchronously (e.g. server
+        // confirmed an entitlement). Pick that up too.
+        if (c.is_pro) {
+          proStore.setPro(true);
+        } else if (c.count >= c.free_limit) {
+          router.push('/paywall');
+          return;
+        }
+      } catch {
+        // Network blip — let the user attempt the scan; the count endpoint
+        // will sort itself out, and the gate will still fire on the next try.
       }
-    } catch {}
+    }
 
     setScanning(true);
     try {

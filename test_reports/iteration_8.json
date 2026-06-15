@@ -1,0 +1,55 @@
+{
+  "summary": "Pro-state-flicker bug fix VERIFIED end-to-end. Backend: 4/4 pro_state regression tests pass (test_pro_state_preservation.py — upgrade flips is_pro, increment preserves is_pro via $setOnInsert, portfolio/save doesn't touch scan_counters, full journey from free→limit→upgrade→save→scan keeps is_pro=true). Frontend: with persisted pv.isPro.v1='1' in AsyncStorage (localStorage on web), the scan tab's bottom badge reads 'PRO · Unlimited' at t~50ms on EVERY entry (initial nav, hard reload, dash→scan refocus, post-delete refocus) — ZERO instances of 'Free scans left' flicker observed across 4 navigation scenarios. CRITICAL ASSERTION (zero-network Pro gate): tapping the shutter on the scan tab as a Pro user produced ZERO /api/scan/count calls (network log empty) — proStore.get() synchronously short-circuits the gate in capture() at scan.tsx:104. PERSISTENCE: hard browser reload while on /scan shows 'PRO · Unlimited' as soon as the scan-counter element mounts (~150ms), proving AsyncStorage hydration via proStore.hydrate() lands before the badge first paints; the 3 follow-up GET /scan/count calls are upgrade-only syncs and cannot downgrade. LOGOUT RESET: clicking logout-btn clears localStorage 'pv.isPro.v1' from '1' to null — proStore.reset() works. ISOLATION (static review): grep across /app/frontend for proStore/useIsPro returns ZERO references in /app/frontend/app/card-detail.tsx and /app/frontend/app/(tabs)/dashboard.tsx — save/delete flows cannot mutate Pro state. Mock paywall upgrade end-to-end: /paywall → subscribe → POST /api/scan/upgrade → proStore.setPro(true) BEFORE router.replace → dashboard renders without paywall reappearing. Pre-existing non-blocking warnings carry over (textShadow*/shadow*/pointerEvents deprecations on RN-web; iter7's dashboard?deletedId first-mount setParams crash also still reproducible but unrelated to this iteration). No new bugs found.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "RN-web deprecated style props (pre-existing, carryover from iter5-7)",
+        "issue": "shadow*/textShadow* style props warn on first paint on RN-web. Migrate to single 'boxShadow' / 'textShadow' string props to silence. Non-blocking. Reference: /app/frontend/app/(tabs)/dashboard.tsx:466-470 (totalValue textShadow*), /app/frontend/app/card-detail.tsx:446,459 (estimateValue textShadow*, retentionMarker shadow*), /app/frontend/app/paywall.tsx:296-298,336-338,365-368 (saveBadge/priceValueActive/cta shadow*+textShadow*)."
+      },
+      {
+        "component": "props.pointerEvents deprecated (pre-existing)",
+        "issue": "RN-web warns 'props.pointerEvents is deprecated. Use style.pointerEvents'. Source likely in scan.tsx mask View at scan.tsx:211 and frame View at scan.tsx:214 (pointerEvents='none' prop usage). Move to style={{ pointerEvents: 'none' }}. Non-blocking."
+      },
+      {
+        "component": "dashboard.tsx deletedId first-mount crash (carryover from iter7 — NOT fixed yet)",
+        "issue": "Reloading or deep-linking /dashboard?deletedId=X still throws 'Attempted to navigate before mounting the Root Layout component' from the router.setParams call at /app/frontend/app/(tabs)/dashboard.tsx:70. Iteration 7 recommended deferring with setTimeout/queueMicrotask. Current code uses queueMicrotask which still races on web first-mount. Not in scope of the Pro-state fix but still open."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pro_state_preservation.py",
+    "/app/test_reports/pytest/pytest_iter8_pro_state.xml",
+    "/tmp/iter8_dashboard.png",
+    "/tmp/iter8_after_upgrade.png",
+    "/tmp/iter8_scan_pro_granted.png",
+    "/tmp/iter8_after_reload_scan.png",
+    "/tmp/iter8_scan_after_delete.png",
+    "/tmp/iter8_shutter.png",
+    "/tmp/iter8_logout.png"
+  ],
+  "action_items": [
+    "(Optional, low-priority follow-up) Silence the RN-web deprecation warnings: convert shadow*/textShadow*/pointerEvents prop usages to their new style-object equivalents in dashboard.tsx, card-detail.tsx, paywall.tsx, and scan.tsx (mask/frame pointerEvents props).",
+    "(Carryover from iter7, still open) Fix the router.setParams first-mount crash at dashboard.tsx:70 — queueMicrotask is still racing on web. A safer pattern is a useRef gate that fires the setParams only after a second render tick, or window.history.replaceState fallback on web."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/src/pro-store.ts — clean module-level singleton: synchronous get(), idempotent setPro() guards against listener spam (line 55 `_isPro === value && _hydrated` early-return), hydrate() is single-shot, reset() persists removal to AsyncStorage. Subscribe pattern is correct. useIsPro() initialises state from proStore.get() on first render — no false-flash possible (line 102).",
+    "/app/frontend/src/auth-context.tsx:19-21 — proStore.hydrate() fires in a useEffect on mount of AuthProvider. This means hydration is async (AsyncStorage roundtrip). On web (localStorage) this is fast (<1 frame) but on native it can take 10-30ms. Minor concern: useIsPro() reads proStore.get() synchronously on first render which returns the module-level default `false` if mount happens before the hydrate await resolves. Not observed in practice on web (the badge consistently shows 'PRO · Unlimited' at t~50ms), but worth flagging for native.",
+    "/app/frontend/src/auth-context.tsx:33-39 — login path is correctly UPGRADE-ONLY (`if (c.is_pro) proStore.setPro(true);`), and a logout calls proStore.reset(). Confirmed by localStorage transition '1' → null on logout-btn tap.",
+    "/app/frontend/app/(tabs)/scan.tsx:36-50 — useIsPro() drives the badge; useEffect at 46-50 mirrors RC entitlement into the store; isPro at line 40 is sticky via OR composition. All correct.",
+    "/app/frontend/app/(tabs)/scan.tsx:96-120 — capture() reads proStore.get() synchronously at line 104. VERIFIED: ZERO /api/scan/count calls fired when shutter is tapped as Pro user. Free-user path correctly fetches count, upgrades store if backend says is_pro, otherwise gates at count>=free_limit.",
+    "/app/frontend/app/(tabs)/scan.tsx:56-70 — useFocusEffect refetches scan/count on every focus but only calls proStore.setPro(true) when c.is_pro is true (line 64). Cannot downgrade. CORRECT.",
+    "/app/frontend/app/paywall.tsx:50-77 — both RC real-purchase path (line 51-55) and mock fallback (line 71-75) call proStore.setPro(true) BEFORE router.replace. Restore path at lines 88-104 also sets store on confirmed entitlement. All four call sites correct.",
+    "/app/frontend/app/card-detail.tsx + dashboard.tsx — grep confirms ZERO proStore/useIsPro references. Save and delete flows cannot mutate Pro state by design.",
+    "Backend (test_pro_state_preservation.py) — 4/4 PASS: upgrade flips is_pro=true; increment uses $setOnInsert and preserves is_pro across 4 subsequent /scan/count POSTs; portfolio/save does not touch scan_counters collection (verified via before/after GET); full journey free→exhaust→upgrade→save→scan keeps is_pro=true throughout."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100% (4/4 pytest pass)", "frontend": "100% on testable Pro-flicker assertions: PRO badge at first paint on initial scan nav, hard reload on /scan, dashboard→scan refocus, post-delete refocus; ZERO /api/scan/count calls on shutter tap as Pro user; localStorage clears on logout. 1 carry-over RN Alert.alert limitation (cannot E2E-test card-detail trash on web) and 1 carry-over deletedId first-mount crash, both pre-existing." },
+  "seed_data_creation": "Reused iter7's 3 saved cards (Mewtwo/Charizard/Pikachu) for uid ZhopI1m5jeQJr5MBoZbHPXqAFtH3. Created 5 TEST_* scan_counters during pytest run (uids prefixed TEST_pro_*, TEST_save_pro_*, TEST_journey_*) — these are isolated, never collide with the production user, and the save_card/journey tests clean up their portfolio rows via DELETE in the test body. scan_counters rows themselves are not deleted; they are negligible and safe.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Pro-store implementation is solid. If you need to re-test: (1) Camera permission must be granted via context.grant_permissions(['camera'], origin=...) so the scan-screen renders (not the permission gate). (2) Use page.evaluate to read window.localStorage.getItem('pv.isPro.v1') as the AsyncStorage equivalent on web. (3) Tap the shutter via [data-testid='scan-shutter'] and assert ZERO /api/scan/count network calls — that proves the synchronous Pro-gate. (4) Mock-upgrade path is /paywall → [data-testid='paywall-subscribe-button']. (5) Carryover open bugs: dashboard?deletedId=X first-mount crash (iter7 RCA), shadow*/textShadow*/pointerEvents RN-web deprecation warnings. None of these regress the Pro-state contract."
+}

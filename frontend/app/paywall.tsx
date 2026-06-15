@@ -12,6 +12,7 @@ import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
 import { useRevenueCat } from '@/src/revenuecat-context';
 import { purchaseByIdentifier, getCustomerInfo, hasProAccess } from '@/src/revenuecat';
+import { proStore } from '@/src/pro-store';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 
 import { useT } from '@/src/i18n-context';
@@ -49,6 +50,7 @@ export default function PaywallScreen() {
         const res = await purchaseByIdentifier(packageId);
         if (res.ok && res.isPro) {
           await refreshRC();
+          proStore.setPro(true);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           router.replace('/(tabs)/dashboard');
           return;
@@ -67,6 +69,10 @@ export default function PaywallScreen() {
       // Expo Go / web fallback — keep the existing mock so the app stays usable
       // until a native build is generated via EAS / Publish.
       await api.upgrade(user.uid);
+      // Persist Pro status to the in-memory store BEFORE navigation so the
+      // scan tab reads `true` on the very next render — eliminates the
+      // post-upgrade paywall flicker.
+      proStore.setPro(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       router.replace('/(tabs)/dashboard');
     } catch (e: any) {
@@ -83,6 +89,7 @@ export default function PaywallScreen() {
         const info = await getCustomerInfo();
         if (hasProAccess(info)) {
           await refreshRC();
+          proStore.setPro(true);
           router.replace('/(tabs)/dashboard');
           return;
         }
@@ -91,6 +98,7 @@ export default function PaywallScreen() {
       }
       const c = await api.getScanCount(user.uid);
       if (c.is_pro) {
+        proStore.setPro(true);
         router.replace('/(tabs)/dashboard');
         return;
       }
