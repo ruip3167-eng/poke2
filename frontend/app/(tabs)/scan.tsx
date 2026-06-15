@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   errorBanner: { position: 'absolute', top: '12%', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(20,22,28,0.92)', borderColor: COLORS.error, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADII.md, maxWidth: '85%' },
   errorText: { color: COLORS.onSurface, fontSize: TYPE.sm, flex: 1 },
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  bottomBlur: { paddingTop: SPACING.lg, paddingBottom: SPACING.xl, alignItems: 'center', backgroundColor: Platform.OS === 'ios' ? 'transparent' : 'rgba(10,11,14,0.92)' },
+  bottomBlur: { paddingTop: SPACING.lg, paddingBottom: SPACING.xxl, alignItems: 'center', backgroundColor: Platform.OS === 'ios' ? 'transparent' : 'rgba(10,11,14,0.92)' },
   shutter: { width: 88, height: 88, borderRadius: RADII.pill, backgroundColor: 'rgba(255,230,0,0.25)', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: COLORS.brand },
   shutterInner: { width: 70, height: 70, borderRadius: RADII.pill, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
   shutterLabel: { color: COLORS.onSurfaceSecondary, fontWeight: '700', marginTop: SPACING.sm, fontSize: TYPE.sm, letterSpacing: 0.3 },
