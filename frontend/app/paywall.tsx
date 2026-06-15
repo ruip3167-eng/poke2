@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator,
 } from 'react-native';
@@ -12,7 +12,7 @@ import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
 import { useRevenueCat } from '@/src/revenuecat-context';
 import { purchaseByIdentifier, getCustomerInfo, hasProAccess } from '@/src/revenuecat';
-import { proStore } from '@/src/pro-store';
+import { proStore, useIsPro } from '@/src/pro-store';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 
 import { useT } from '@/src/i18n-context';
@@ -24,11 +24,29 @@ export default function PaywallScreen() {
   const { user } = useAuth();
   const { available: rcAvailable, refresh: refreshRC } = useRevenueCat();
   const t = useT();
+  // Synchronous Pro flag — read on first render so the pricing table is
+  // never painted for a paid user. We also guard the upgrade tab and watch
+  // the store for live changes (e.g. mock upgrade landing mid-render).
+  const isPro = useIsPro();
   type PlanKey = 'monthly' | 'yearly';
   // Yearly selected by default — drives conversion to the higher-LTV plan.
   const [selected, setSelected] = useState<PlanKey>('yearly');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Hard bounce: if the user is already Pro the pricing table must NOT
+  // render — even if they reached this screen via the tab bar, a deep
+  // link, or a stale navigation stack. We use replace() so the back
+  // gesture can't bring them back to the paywall.
+  useEffect(() => {
+    if (isPro || proStore.get()) {
+      router.replace('/(tabs)/dashboard');
+    }
+  }, [isPro, router]);
+
+  // Belt-and-braces: never paint the pricing table for a Pro user even
+  // for the single frame before the useEffect fires.
+  if (isPro || proStore.get()) return null;
 
   const BENEFITS = [t.paywall.benefit1, t.paywall.benefit2, t.paywall.benefit3];
 

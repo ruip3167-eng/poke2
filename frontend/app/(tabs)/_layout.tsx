@@ -4,9 +4,15 @@ import { BlurView } from 'expo-blur';
 import { Platform, StyleSheet, View } from 'react-native';
 import { COLORS } from '@/src/theme';
 import { useT } from '@/src/i18n-context';
+import { useIsPro } from '@/src/pro-store';
 
 export default function TabsLayout() {
   const t = useT();
+  // Read the synchronous Pro flag. When true we morph the Upgrade tab into a
+  // "Pro" status badge (lightning-bolt-filled, neon yellow) that just bounces
+  // the user back to the dashboard — never the paywall — so even a stray tap
+  // never re-exposes the pricing table.
+  const isPro = useIsPro();
   return (
     <Tabs
       screenOptions={{
@@ -49,7 +55,18 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="upgrade"
-        options={{
+        options={isPro ? {
+          // Pro user: render a non-interactive-looking "Pro Member" badge.
+          // The screen itself also bounces back to /dashboard on focus so
+          // the paywall pricing table never renders for a paid user.
+          title: 'Pro',
+          tabBarIcon: ({ focused }) => (
+            <Ionicons name="flash" size={22} color={focused ? COLORS.brand : COLORS.brand} />
+          ),
+          tabBarActiveTintColor: COLORS.brand,
+          tabBarInactiveTintColor: COLORS.brand,
+          tabBarButtonTestID: 'tab-pro-badge',
+        } : {
           title: t.tabs.upgrade,
           tabBarIcon: ({ color }) => <Ionicons name="flash-outline" size={22} color={color} />,
           tabBarButtonTestID: 'tab-upgrade',

@@ -1,0 +1,34 @@
+{
+  "summary": "Iter11 paywall-flicker fix VERIFIED across all 4 frontend scenarios on 390x844 Expo web preview. (1) Pro tab-bar morph: After login as testuser+pv@example.com the third tab renders with data-testid='tab-pro-badge' (not 'tab-upgrade'), Ionicon glyph \\uf316 ('flash' filled), color rgb(255,230,0)=#FFE600, label 'Pro' — confirmed via getComputedStyle and innerText. (2) Pro tap-bounce on (tabs)/upgrade: Tapping tab-pro-badge from dashboard NEVER paints the pricing table. Polled DOM every 80ms for 10 frames after the tap — plan-monthly/plan-yearly/upgrade-cta-button/upgrade-screen/'Subscrever Agora' text counts were all 0 at every frame and the URL stayed on /dashboard (component returns null synchronously and useFocusEffect replace() short-circuits). (3) Pro /paywall direct nav: page.goto(/paywall) → polled 20 frames at 50ms each. paywall-screen/paywall-title/paywall-plan-yearly/paywall-plan-monthly/paywall-subscribe-button were NEVER visible (all getBoundingClientRect width/height=0 or display=none) — synchronous early-return guards the render, useEffect replaces URL to /dashboard within ~100ms. (4) Free state regression: signed up a fresh demo+free<ts>@example.com user — tab-bar shows data-testid='tab-upgrade' with Ionicon glyph \\uf31a ('flash-outline'), label 'Upgrade' (EN locale; PT key resolves to 'Pro'). Tapping it routes to /upgrade and renders plan-monthly + plan-yearly + upgrade-cta-button. Tapping Subscrever Agora flips the singleton to Pro and the tab morphs in-place: tab-pro-badge count goes 0→1 and tab-upgrade goes 1→0 within ~3s of the api.upgrade() mock returning. ZERO pricing-table flash observed for Pro users in either /(tabs)/upgrade or /paywall. No new RN/Expo deprecation issues.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/tmp/iter11_postlogin.png",
+    "/tmp/iter11_pro_paywall_final.png",
+    "/tmp/iter11_free_upgrade.png",
+    "/tmp/iter11_after_upgrade.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "/app/frontend/app/(tabs)/_layout.tsx:56-74 — clean conditional options pattern: when useIsPro() is true the tab-screen gets testID 'tab-pro-badge', title 'Pro', tabBarIcon name 'flash' filled, and both active/inactive tint pinned to COLORS.brand so the badge is always neon-yellow regardless of focus. Else branch keeps the legacy testID 'tab-upgrade', title from t.tabs.upgrade, and the 'flash-outline' icon. ✓",
+    "/app/frontend/app/(tabs)/upgrade.tsx:33-37 — useFocusEffect runs proStore.get() synchronously and calls router.replace('/(tabs)/dashboard') for Pro users. The :58 early-return `if (proFromStore || proStore.get()) return null;` prevents the pricing table from being mounted on the very first render. Belt-and-braces. ✓",
+    "/app/frontend/app/paywall.tsx:41-49 — same pattern: useEffect router.replace + synchronous `if (isPro || proStore.get()) return null;` guard. Polling shows the pricing DOM never paints. ✓",
+    "/app/frontend/src/pro-store.ts is a clean hand-rolled subject — `useIsPro()` initializes useState from proStore.get() so the very first React render reflects the in-memory truth, eliminating the previous flicker window. ✓",
+    "Minor (pre-existing, NOT introduced this iter): web console emits 'textShadow*'/'shadow*'/'props.pointerEvents is deprecated' RN-Web warnings. Cosmetic only — no impact on flow. Not raised as a blocker."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (skipped per request — no backend changes in this iteration)",
+    "frontend": "100% — 4/4 paywall-flicker scenarios verified"
+  },
+  "seed_data_creation": "Signed up one fresh free Firebase user (demo+free<unix-ts>@example.com / TestPass123!) to verify the free-state branch; reused existing Pro account testuser+pv@example.com for the Pro-state branches.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Paywall-flicker fix is fully green. Tab-bar morph is driven by useIsPro() in (tabs)/_layout.tsx. /(tabs)/upgrade.tsx and /paywall.tsx both return null synchronously when proStore.get()===true and replace() to /(tabs)/dashboard via useFocusEffect / useEffect respectively. Pricing-table testIDs to assert NEVER appear for Pro: plan-monthly, plan-yearly, upgrade-cta-button, upgrade-screen, paywall-plan-yearly, paywall-plan-monthly, paywall-subscribe-button, paywall-screen, paywall-title. Free-state regression CTA still works via api.upgrade() mock fallback.",
+  "rca_of_issue": "Pre-fix RCA: useEffect-based isPro detection inside upgrade/paywall ran AFTER the first render, so the pricing table painted for 1+ frames before the redirect fired — visible flicker. Fix: (a) tab-bar reads useIsPro() at the layout level and renders a completely different tab (testID 'tab-pro-badge') so Pro users don't even see an 'Upgrade' affordance; (b) the screens themselves do a synchronous `if (proStore.get()) return null;` BEFORE any JSX, plus a useFocusEffect/useEffect router.replace() for navigation cleanup. Both belts ensure zero pricing frames are painted for a Pro user."
+}

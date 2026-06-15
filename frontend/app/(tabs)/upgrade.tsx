@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth-context';
+import { proStore, useIsPro } from '@/src/pro-store';
 import { COLORS, SPACING, RADII, TYPE } from '@/src/theme';
 
 const BENEFITS = [
@@ -16,20 +18,44 @@ const BENEFITS = [
 
 export default function UpgradeScreen() {
   const { user } = useAuth();
+  const router = useRouter();
+  // Sync Pro flag — read on first render so the pricing UI never paints
+  // for a paid user. Combined with the bounce on focus, the user simply
+  // doesn't see this screen as Pro.
+  const proFromStore = useIsPro();
   const [plan, setPlan] = useState<'monthly' | 'yearly'>('yearly');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-  const [isPro, setIsPro] = useState(false);
+  const [isPro, setIsPro] = useState<boolean>(() => proStore.get());
+
+  // Hard bounce on focus. If a Pro user lands on this tab (via tab-bar tap,
+  // deep link, etc.) we throw them straight to the dashboard.
+  useFocusEffect(useCallback(() => {
+    if (proStore.get()) {
+      router.replace('/(tabs)/dashboard');
+    }
+  }, [router]));
+
+  // Keep local state in sync with the store and react to a mid-screen flip
+  // (e.g. RC entitlement landing while the user is on this tab).
+  useEffect(() => { setIsPro(proFromStore || proStore.get()); }, [proFromStore]);
 
   useEffect(() => {
     (async () => {
       if (!user) return;
       try {
         const c = await api.getScanCount(user.uid);
-        setIsPro(c.is_pro);
+        if (c.is_pro) {
+          proStore.setPro(true);
+          setIsPro(true);
+        }
       } catch {}
     })();
   }, [user]);
+
+  // Belt-and-braces: render nothing for Pro users so the pricing table can
+  // never flash before the focus effect bounces them away.
+  if (proFromStore || proStore.get()) return null;
 
   const subscribe = async () => {
     if (!user) return;
@@ -37,6 +63,7 @@ export default function UpgradeScreen() {
     try {
       // MOCK upgrade — flips is_pro server-side
       await api.upgrade(user.uid);
+      proStore.setPro(true);
       setDone(true);
       setIsPro(true);
     } finally {
