@@ -58,40 +58,46 @@ export default function ManualSearchScreen() {
 
   /**
    * Move the western Scarlet & Violet base set to the top and *prepend*
-   * synthetic entries for the Japanese SV bases. pokemontcg.io's free API
-   * is English-centric and currently has zero cards under sv1S / sv1V, but
-   * users explicitly want to be able to pick them — we add an inline note
-   * (see `isJapaneseFlagged` below) so they know to expect "card not found"
-   * for the JP variants until the API ships JP data.
+   * synthetic entries for the Japanese SV bases + two extra-popular SV-era
+   * sets the community searches for the most. We map each visible label to
+   * the *exact* technical set.id pokemontcg.io expects:
    *
-   * Also: the API returns id `sv1` lowercase for the western set; we keep
-   * it untouched but ensure the order is: SV western → SV ex JP → SV ex JP V → rest.
+   *    'Scarlet & Violet Base Set' → sv1
+   *    'Scarlet ex [Japanese]'     → sv1s   (lowercase, JP-only — API may 404)
+   *    'Violet ex [Japanese]'      → sv1v   (lowercase, JP-only — API may 404)
+   *    'Pokémon 151'               → sv3pt5
+   *    'Obsidian Flames'           → sv3
+   *
+   * Using set.id (not set.name) sidesteps every URL-encoding/whitespace/
+   * punctuation issue we had with set.name queries — pokemontcg.io's id
+   * field is opaque ASCII.
    */
   function reorderAndPinSets(all: SetSummary[]): SetSummary[] {
-    const svWestern = all.find((s) => s.id.toLowerCase() === 'sv1');
-    const pinned: SetSummary[] = [];
-    if (svWestern) pinned.push(svWestern);
-    pinned.push({
-      id: 'sv1S',
-      name: 'Scarlet ex [Japanese]',
-      series: 'Scarlet & Violet · Japan',
-      release_date: '2023/01/20',
-      total: 78,
-      printed_total: 78,
-      symbol_url: null,
-      logo_url: null,
+    type Pin = { id: string; name: string; series?: string; release_date?: string; total?: number };
+    const PINS: Pin[] = [
+      { id: 'sv1',    name: 'Scarlet & Violet Base Set', series: 'Scarlet & Violet', release_date: '2023/03/31', total: 258 },
+      { id: 'sv1s',   name: 'Scarlet ex [Japanese]',     series: 'Scarlet & Violet · Japan', release_date: '2023/01/20', total: 78 },
+      { id: 'sv1v',   name: 'Violet ex [Japanese]',      series: 'Scarlet & Violet · Japan', release_date: '2023/01/20', total: 78 },
+      { id: 'sv3pt5', name: 'Pokémon 151',               series: 'Scarlet & Violet', release_date: '2023/09/22', total: 207 },
+      { id: 'sv3',    name: 'Obsidian Flames',           series: 'Scarlet & Violet', release_date: '2023/08/11', total: 230 },
+    ];
+    const pinnedIds = new Set(PINS.map((p) => p.id.toLowerCase()));
+    // Build pinned rows. When the API list contains the same id we keep
+    // the API's symbol/logo url so the row still has artwork.
+    const pinned: SetSummary[] = PINS.map((p) => {
+      const apiMatch = all.find((s) => s.id.toLowerCase() === p.id.toLowerCase());
+      return {
+        id: p.id,
+        name: p.name, // overridden human-friendly label
+        series: p.series ?? apiMatch?.series ?? null,
+        release_date: p.release_date ?? apiMatch?.release_date ?? null,
+        total: p.total ?? apiMatch?.total ?? null,
+        printed_total: apiMatch?.printed_total ?? null,
+        symbol_url: apiMatch?.symbol_url ?? null,
+        logo_url: apiMatch?.logo_url ?? null,
+      };
     });
-    pinned.push({
-      id: 'sv1V',
-      name: 'Violet ex [Japanese]',
-      series: 'Scarlet & Violet · Japan',
-      release_date: '2023/01/20',
-      total: 78,
-      printed_total: 78,
-      symbol_url: null,
-      logo_url: null,
-    });
-    const rest = all.filter((s) => s.id.toLowerCase() !== 'sv1');
+    const rest = all.filter((s) => !pinnedIds.has(s.id.toLowerCase()));
     return [...pinned, ...rest];
   }
 
@@ -99,8 +105,8 @@ export default function ManualSearchScreen() {
   // (the API only ships English/international releases). We surface this
   // honestly in the UI so the user doesn't waste time wondering why the
   // lookup keeps 404'ing.
-  const JAPANESE_ONLY_IDS = new Set(['sv1S', 'sv1V']);
-  const isJapaneseOnly = (id: string) => JAPANESE_ONLY_IDS.has(id);
+  const JAPANESE_ONLY_IDS = new Set(['sv1s', 'sv1v']);
+  const isJapaneseOnly = (id: string) => JAPANESE_ONLY_IDS.has(id.toLowerCase());
 
   const filteredSets = useMemo(() => {
     if (!sets) return [];
