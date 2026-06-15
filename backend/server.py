@@ -103,6 +103,13 @@ class SaveCardRequest(BaseModel):
     condition: ConditionPayload
     condition_grade: str
     condition_multiplier: float
+    # Live market snapshot at save time (used for trend comparisons later).
+    tcgplayer_market: Optional[float] = None
+    cardmarket_average: Optional[float] = None
+    cardmarket_trend: Optional[float] = None
+    price_source: Optional[str] = None
+    price_at_creation: Optional[float] = None
+    card_id: Optional[str] = None
 
 
 class CardRecord(BaseModel):
@@ -118,6 +125,15 @@ class CardRecord(BaseModel):
     condition_grade: str
     condition_multiplier: float
     created_at: str
+    # Persisted market snapshot from the original save. We refetch live
+    # prices on the detail screen and diff against price_at_creation to
+    # render up/down trend arrows on the portfolio.
+    tcgplayer_market: Optional[float] = None
+    cardmarket_average: Optional[float] = None
+    cardmarket_trend: Optional[float] = None
+    price_source: Optional[str] = None
+    price_at_creation: Optional[float] = None
+    card_id: Optional[str] = None
 
 
 class ScanCount(BaseModel):
@@ -505,6 +521,14 @@ async def save_card(req: SaveCardRequest):
         condition_grade=req.condition_grade,
         condition_multiplier=req.condition_multiplier,
         created_at=datetime.now(timezone.utc).isoformat(),
+        tcgplayer_market=req.tcgplayer_market,
+        cardmarket_average=req.cardmarket_average,
+        cardmarket_trend=req.cardmarket_trend,
+        price_source=req.price_source,
+        # Fall back to market_price so we always have *something* to trend
+        # against, even for older saves that never sent price_at_creation.
+        price_at_creation=req.price_at_creation if req.price_at_creation is not None else req.market_price,
+        card_id=req.card_id,
     )
     doc = rec.model_dump()
     await db.cards.insert_one(doc.copy())

@@ -77,6 +77,7 @@ export default function ConditionScreen() {
           cardmarket_average: String(price.cardmarket_average ?? ''),
           cardmarket_trend: String(price.cardmarket_trend ?? ''),
           price_source: price.price_source ?? '',
+          card_id_api: price.card_id ?? '',
           estimated_value: String(estimated),
           condition_grade: grade,
           condition_multiplier: String(multiplier),
@@ -129,6 +130,10 @@ export default function ConditionScreen() {
             <ActivityIndicator color={COLORS.brand} size="large" />
             <Text style={styles.loadingTitle}>{t.condition.fetchingTitle}</Text>
             <Text style={styles.loadingSub}>{t.condition.fetchingSub}</Text>
+            <View style={styles.loadingTipsBox}>
+              <Ionicons name="bulb-outline" size={16} color={COLORS.brand} />
+              <Text style={styles.loadingTips} testID="loading-tips">{t.scan.tips}</Text>
+            </View>
           </View>
         </View>
       )}
@@ -271,4 +276,21 @@ const styles = StyleSheet.create({
   },
   loadingTitle: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '800', textAlign: 'center' },
   loadingSub: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, textAlign: 'center' },
+  loadingTipsBox: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: 'rgba(255,230,0,0.07)',
+    borderColor: 'rgba(255,230,0,0.25)',
+    borderWidth: 1,
+    borderRadius: RADII.md,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    maxWidth: 320,
+  },
+  loadingTips: {
+    flex: 1,
+    color: COLORS.onSurfaceTertiary,
+    fontSize: 11,
+    lineHeight: 16,
+  },
 });

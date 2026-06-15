@@ -65,6 +65,12 @@ export interface CardRecord {
   condition_grade: string;
   condition_multiplier: number;
   created_at: string;
+  tcgplayer_market?: number | null;
+  cardmarket_average?: number | null;
+  cardmarket_trend?: number | null;
+  price_source?: string | null;
+  price_at_creation?: number | null;
+  card_id?: string | null;
 }
 
 export interface ScanCount {

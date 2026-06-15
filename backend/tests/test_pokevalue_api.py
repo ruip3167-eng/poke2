@@ -154,6 +154,107 @@ class TestPortfolio:
         assert TestPortfolio.card_id not in ids
 
 
+# ---------- NEW: Portfolio with live-market snapshot fields ----------
+class TestPortfolioMarketSnapshot:
+    """Verify the 5 new optional fields are accepted by POST /portfolio/save
+    and round-trip through GET /portfolio/{user_id}."""
+    user_id = f"TEST_snap_{uuid.uuid4().hex[:8]}"
+    card_id = None
+
+    def test_save_card_with_market_snapshot(self, base_url):
+        payload = {
+            "user_id": self.__class__.user_id,
+            "name": "TEST_Togetic",
+            "set_name": "Neo Genesis",
+            "number": "20/111",
+            "image_url": "https://example.com/togetic.png",
+            "market_price": 12.5,
+            "estimated_value": 10.0,
+            "condition": {
+                "centering": "near_mint", "corners": "near_mint",
+                "edges": "near_mint", "surface": "near_mint",
+                "whitening": False, "scratches": False,
+            },
+            "condition_grade": "Near Mint",
+            "condition_multiplier": 0.8,
+            # NEW fields
+            "tcgplayer_market": 11.20,
+            "cardmarket_average": 12.45,
+            "cardmarket_trend": 12.50,
+            "price_source": "cardmarket_trend",
+            "price_at_creation": 12.50,
+            "card_id": "neo1-20",
+        }
+        r = requests.post(f"{base_url}/api/portfolio/save", json=payload)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "_id" not in body
+        assert body["tcgplayer_market"] == 11.20
+        assert body["cardmarket_average"] == 12.45
+        assert body["cardmarket_trend"] == 12.50
+        assert body["price_source"] == "cardmarket_trend"
+        assert body["price_at_creation"] == 12.50
+        assert body["card_id"] == "neo1-20"
+        TestPortfolioMarketSnapshot.card_id = body["id"]
+
+    def test_get_portfolio_returns_snapshot_fields(self, base_url):
+        assert TestPortfolioMarketSnapshot.card_id, "save must run first"
+        r = requests.get(f"{base_url}/api/portfolio/{self.__class__.user_id}")
+        assert r.status_code == 200
+        rows = r.json()
+        match = next((c for c in rows if c["id"] == TestPortfolioMarketSnapshot.card_id), None)
+        assert match is not None, f"saved card not found: {rows}"
+        assert match["tcgplayer_market"] == 11.20
+        assert match["cardmarket_average"] == 12.45
+        assert match["cardmarket_trend"] == 12.50
+        assert match["price_source"] == "cardmarket_trend"
+        assert match["price_at_creation"] == 12.50
+        assert match["card_id"] == "neo1-20"
+
+    def test_legacy_save_backfills_price_at_creation(self, base_url):
+        """Older clients omit price_at_creation → backend should fall back
+        to market_price so the dashboard can still compute a (flat) trend."""
+        payload = {
+            "user_id": self.__class__.user_id,
+            "name": "TEST_Legacy",
+            "market_price": 5.0,
+            "estimated_value": 4.0,
+            "condition": {
+                "centering": "near_mint", "corners": "near_mint",
+                "edges": "near_mint", "surface": "near_mint",
+                "whitening": False, "scratches": False,
+            },
+            "condition_grade": "Near Mint",
+            "condition_multiplier": 0.8,
+        }
+        r = requests.post(f"{base_url}/api/portfolio/save", json=payload)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # Even though caller did not send price_at_creation, server backfills.
+        assert body["price_at_creation"] == 5.0
+        # Other new fields default to None.
+        assert body["tcgplayer_market"] is None
+        assert body["cardmarket_trend"] is None
+        assert body["price_source"] is None
+        # cleanup
+        requests.delete(f"{base_url}/api/portfolio/{body['id']}")
+
+    def test_cleanup(self, base_url):
+        if TestPortfolioMarketSnapshot.card_id:
+            requests.delete(f"{base_url}/api/portfolio/{TestPortfolioMarketSnapshot.card_id}")
+
+
+# ---------- Regression: price endpoint unchanged ----------
+def test_price_pikachu_no_regression(base_url):
+    """The simple Pikachu query must still 200 with recommended_eur + price_source."""
+    r = requests.get(f"{base_url}/api/price", params={"name": "Pikachu"}, timeout=30)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("recommended_eur") is not None
+    assert body.get("recommended_eur") > 0
+    assert body.get("price_source")
+
+
 # ---------- Vision (Gemini) ----------
 def test_scan_analyze_real_card(base_url):
     img_path = Path("/tmp/card_small.jpg")

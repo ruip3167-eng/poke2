@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
   RefreshControl, TextInput, ScrollView,
@@ -120,41 +120,106 @@ export default function DashboardScreen() {
     router.replace('/(auth)/login');
   };
 
-  const renderRow = ({ item }: { item: CardRecord }) => (
-    <Pressable
-      testID={`portfolio-card-${item.id}`}
-      style={styles.row}
-      onPress={() => router.push({
-        pathname: '/card-detail',
-        params: {
-          id: item.id, name: item.name, set_name: item.set_name ?? '',
-          number: item.number ?? '', image_url: item.image_url ?? '',
-          market_price: String(item.market_price), estimated_value: String(item.estimated_value),
-          condition_grade: item.condition_grade, condition_multiplier: String(item.condition_multiplier),
-          mode: 'saved',
-        },
-      })}
-    >
-      <View style={styles.rowImgWrap}>
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.rowImg} contentFit="cover" />
-        ) : (
-          <View style={[styles.rowImg, styles.rowImgPlaceholder]}>
-            <Ionicons name="image-outline" size={20} color={COLORS.onSurfaceTertiary} />
-          </View>
-        )}
-      </View>
-      <View style={styles.rowInfo}>
-        <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.rowSet} numberOfLines={1}>{item.set_name || t.dashboard.unknownSet}</Text>
-        <View style={styles.gradeChip}>
-          <View style={[styles.gradeDot, { backgroundColor: GRADE_COLORS[item.condition_grade] ?? COLORS.onSurfaceTertiary }]} />
-          <Text style={styles.gradeChipText}>{item.condition_grade}</Text>
+  // Refresh live prices for each saved card so we can show up/down trend
+  // arrows. We do this in parallel after the cards list is loaded. Each card
+  // keyed by id → its latest recommended_eur from pokemontcg.io.
+  const [livePrices, setLivePrices] = useState<Record<string, number | null>>({});
+  useEffect(() => {
+    if (cards.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      cards.map((c) =>
+        api
+          .getPrice({
+            name: c.name,
+            set_name: c.set_name ?? undefined,
+            number: c.number ?? undefined,
+          })
+          .then((pr) => {
+            const m = pr.recommended_eur ?? pr.cardmarket_trend
+              ?? pr.cardmarket_average ?? pr.tcgplayer_market ?? null;
+            return [c.id, m] as const;
+          })
+          .catch(() => [c.id, null] as const),
+      ),
+    ).then((pairs) => {
+      if (cancelled) return;
+      const next: Record<string, number | null> = {};
+      pairs.forEach(([id, val]) => { next[id] = val; });
+      setLivePrices(next);
+    });
+    return () => { cancelled = true; };
+  }, [cards]);
+
+  const renderRow = ({ item }: { item: CardRecord }) => {
+    const baseline = item.price_at_creation ?? item.market_price ?? 0;
+    const live = livePrices[item.id];
+    const liveEst = live !== null && live !== undefined
+      ? live * (item.condition_multiplier || 1)
+      : item.estimated_value;
+    // Trend: green ⬆️ if live > baseline, red ⬇️ if lower, neutral dash if equal.
+    let trend: 'up' | 'down' | 'flat' | null = null;
+    if (live !== null && live !== undefined && baseline > 0) {
+      const diff = live - baseline;
+      trend = Math.abs(diff) < 0.01 ? 'flat' : diff > 0 ? 'up' : 'down';
+    }
+    return (
+      <Pressable
+        testID={`portfolio-card-${item.id}`}
+        style={styles.row}
+        onPress={() => router.push({
+          pathname: '/card-detail',
+          params: {
+            id: item.id, name: item.name, set_name: item.set_name ?? '',
+            number: item.number ?? '', image_url: item.image_url ?? '',
+            market_price: String(item.market_price), estimated_value: String(item.estimated_value),
+            condition_grade: item.condition_grade, condition_multiplier: String(item.condition_multiplier),
+            mode: 'saved',
+            tcgplayer_market: String(item.tcgplayer_market ?? ''),
+            cardmarket_average: String(item.cardmarket_average ?? ''),
+            cardmarket_trend: String(item.cardmarket_trend ?? ''),
+            price_source: item.price_source ?? '',
+            price_at_creation: String(item.price_at_creation ?? item.market_price ?? 0),
+            card_id_api: item.card_id ?? '',
+          },
+        })}
+      >
+        <View style={styles.rowImgWrap}>
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.rowImg} contentFit="cover" />
+          ) : (
+            <View style={[styles.rowImg, styles.rowImgPlaceholder]}>
+              <Ionicons name="image-outline" size={20} color={COLORS.onSurfaceTertiary} />
+            </View>
+          )}
         </View>
-      </View>
-      <Text style={styles.rowPrice}>{formatPrice(item.estimated_value)}</Text>
-    </Pressable>
-  );
+        <View style={styles.rowInfo}>
+          <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.rowSet} numberOfLines={1}>{item.set_name || t.dashboard.unknownSet}</Text>
+          <View style={styles.gradeChip}>
+            <View style={[styles.gradeDot, { backgroundColor: GRADE_COLORS[item.condition_grade] ?? COLORS.onSurfaceTertiary }]} />
+            <Text style={styles.gradeChipText}>{item.condition_grade}</Text>
+          </View>
+        </View>
+        <View style={styles.rowPriceWrap}>
+          <Text style={styles.rowPrice}>{formatPrice(liveEst)}</Text>
+          {trend && (
+            <View
+              style={styles.trendBadge}
+              testID={`portfolio-trend-${item.id}`}
+              accessibilityLabel={trend === 'up' ? t.dashboard.trendUp : trend === 'down' ? t.dashboard.trendDown : t.dashboard.trendFlat}
+            >
+              <Ionicons
+                name={trend === 'up' ? 'arrow-up' : trend === 'down' ? 'arrow-down' : 'remove'}
+                size={12}
+                color={trend === 'up' ? COLORS.success : trend === 'down' ? COLORS.error : COLORS.onSurfaceTertiary}
+              />
+            </View>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
 
   const renderEmpty = () => (
     <View style={styles.empty} testID="portfolio-empty">
@@ -452,11 +517,17 @@ const styles = StyleSheet.create({
   },
   gradeDot: { width: 6, height: 6, borderRadius: 999 },
   gradeChipText: { color: COLORS.onSurfaceSecondary, fontSize: 10, fontWeight: '700' },
+  rowPriceWrap: { alignItems: 'flex-end', gap: 4 },
   rowPrice: {
     color: COLORS.brand,
     fontSize: TYPE.lg,
     fontWeight: '900',
     letterSpacing: -0.3,
+  },
+  trendBadge: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center', justifyContent: 'center',
   },
 
   // Empty

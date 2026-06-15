@@ -1,0 +1,55 @@
+{
+  "summary": "Both backend + frontend tested end-to-end on the public web preview (390×844 mobile viewport). All 7 review-request items pass. BACKEND (pytest 15/15 passed, 1 skipped vision test): POST /api/portfolio/save accepts and persists the 5 new optional fields (tcgplayer_market, cardmarket_average, cardmarket_trend, price_source, price_at_creation, card_id); GET /api/portfolio/{user_id} round-trips all of them with no _id leak. Legacy saves without price_at_creation are correctly back-filled with market_price (server.py:530). GET /api/price?name=Pikachu still 200 with recommended_eur + price_source — no regression. FRONTEND: (1) scan.tsx no longer renders testID='scan-tips' on the camera view (verified DOM null). (2) condition.tsx loading overlay (testID='price-loading-overlay') now contains testID='loading-tips' with the 3-step photography tips beneath spinner — captured live during /api/price fetch with full EN copy 'To ensure live market prices: 1. Place the card on a flat surface...'. (3) dashboard.tsx after live-price Promise.all settles: testID='portfolio-trend-<id>' renders for every card; Pikachu (price_at_creation=0.50 → live 2.50€) shows green arrow color rgb(34,197,94) + aria='Up since you saved it'; Charizard (price_at_creation=9999.99 → live ~339€) shows red rgb(239,68,68) + aria='Down since you saved it'. (4) card-detail.tsx in saved mode refetches live prices on mount and renders testID='detail-trend-down' with -97.3% percentage badge for Charizard, with estimated value '217,14 €' computed from live market × 80% multiplier; price-source-label correctly shows 'via Cardmarket Trend (EUR)'. (5) Fixed a build-blocker: dashboard.tsx imported useCallback/useMemo/useState but USED useEffect at line 127 — added useEffect to the import. RN-web warnings (shadow*/textShadow*/props.pointerEvents) remain non-blocking pre-existing. Two text-node warnings ('Unexpected text node') appear when condition screen mounts — minor, see action items.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "condition.tsx",
+        "issue": "Console error 'Unexpected text node: . A text node cannot be a child of a <View>.' fires twice when the screen mounts. Likely a stray whitespace/expression between JSX siblings (suspect lines 145-149 around bannerSub conditional or 218-228 footer Pressable children). Cosmetic, but RN-strict mode flags it. Reference: /app/frontend/app/condition.tsx."
+      },
+      {
+        "component": "shadow*/textShadow*/pointerEvents (pre-existing, carry-over)",
+        "issue": "RN-web still warns: '\"shadow*\" style props are deprecated. Use \"boxShadow\".', '\"textShadow*\" style props are deprecated. Use \"textShadow\".', and 'props.pointerEvents is deprecated. Use style.pointerEvents'. Non-blocking. References: /app/frontend/app/(tabs)/dashboard.tsx:416-418, /app/frontend/app/card-detail.tsx:438,451 and the LinearGradient pointerEvents on retentionMarker."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pokevalue_api.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/iteration_5.json",
+    "/tmp/iter5_overlay.png",
+    "/tmp/iter5_final_dash.png",
+    "/tmp/iter5_final_detail.png",
+    "/tmp/iter5_scan.png"
+  ],
+  "action_items": [
+    "(Optional, minor) Investigate the two 'Unexpected text node' warnings on condition.tsx mount — likely a stray ' ' or {expression && ...} where the falsy branch returns an empty string. Replace with `null` or wrap in <Text>.",
+    "(Optional, minor) Migrate dashboard.tsx:416-418 textShadow* and card-detail.tsx:438,451 textShadow*/shadow* props to RN-web friendly textShadow / boxShadow strings to silence repeat console warnings."
+  ],
+  "critical_code_review_comments": [
+    "server.py:95-112 — SaveCardRequest correctly extended with 5 Optional fields (default None) + card_id; non-breaking for older clients. ✅",
+    "server.py:115-136 — CardRecord persists and returns the same 5 fields; GET /portfolio uses projection {_id:0} so no ObjectId leaks. ✅",
+    "server.py:530 — price_at_creation backfill `req.price_at_creation if req.price_at_creation is not None else req.market_price` is exactly the behaviour the dashboard relies on for older saves → produces a (flat) trend instead of null. ✅",
+    "dashboard.tsx:127 — `useEffect(...)` was used WITHOUT being imported (line 1 only had useCallback/useMemo/useState). This was a build-blocker on web; FIXED by adding useEffect to the import. Without this fix the dashboard would have crashed at render. 🔧",
+    "dashboard.tsx:127-152 — parallel Promise.all with per-card .catch(() => null) is correct: one bad card never blocks the rest. cancelled flag prevents setState on unmount. ✅",
+    "dashboard.tsx:154-165 — trend computation uses 1¢ tolerance (Math.abs(diff) < 0.01) → matches card-detail.tsx:103 logic exactly. ✅",
+    "card-detail.tsx:60-80 — refetch on saved mode is correctly gated by `p.mode === 'saved'` and uses a cancelled flag. Falls back silently to the persisted snapshot on error. ✅",
+    "card-detail.tsx:100-108 — trend badge renders only for saved mode AND when baseline + live both exist; percentage uses signed +/-X.X% format; verified live: Charizard came out -97.3%. ✅",
+    "card-detail.tsx:144 — `price_at_creation: market` on save: this records the current displayed market (post-recommended_eur logic) as the baseline. Consistent with backend backfill. ✅",
+    "condition.tsx:128-139 — loading overlay now wraps tips in testID='loading-tips' inside testID='price-loading-overlay'. zIndex:10 ensures it sits above the scroll content. ✅",
+    "scan.tsx:161-240 — scan-tips testID has been fully removed from the camera view; verified DOM-null on web preview. ✅"
+  ],
+  "updated_files": [
+    "/app/frontend/app/(tabs)/dashboard.tsx (added missing useEffect import — build-blocker fix)",
+    "/app/backend/tests/test_pokevalue_api.py (added TestPortfolioMarketSnapshot class + test_price_pikachu_no_regression — 5 new tests, all passing)"
+  ],
+  "success_rate": { "backend": "100% (15/15 passed, 1 skipped vision test)", "frontend": "100% on all requested testIDs (scan-tips absent, loading-tips present, 2× portfolio-trend with correct colors+aria, detail-trend-down with -97.3%)" },
+  "seed_data_creation": "Seeded 2 cards via direct backend POST for Firebase uid ZhopI1m5jeQJr5MBoZbHPXqAFtH3 (testuser+pv@example.com): Pikachu (price_at_creation=0.50, expected ⬆) and Charizard (price_at_creation=9999.99, expected ⬇). Both deleted at end of test run via DELETE /api/portfolio/{id}.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To exercise the trend badges on the dashboard you need at least one saved card whose price_at_creation differs from the current pokemontcg.io live price. Seed quickly via curl: POST /api/portfolio/save with name='Pikachu', price_at_creation=0.50 → green ⬆ vs live ~2-3€. The Firebase test user testuser+pv@example.com / TestPass123! resolves to uid 'ZhopI1m5jeQJr5MBoZbHPXqAFtH3' (capture it from backend logs after a portfolio GET). Wait 10-14 seconds after dashboard mount for the parallel Promise.all live-price fetch to settle before asserting on portfolio-trend-<id>. The dashboard's useEffect import was missing pre-fix — main agent should be aware this would have crashed at runtime had it shipped.",
+  "rca_of_issue": "N/A — feature additive iteration. The single build-blocker (missing useEffect import in dashboard.tsx) was an oversight when E1 added the live-price Promise.all block; fixed inline."
+}

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -31,6 +31,9 @@ export default function CardDetailScreen() {
     estimated_value: string; condition_grade: string; condition_multiplier: string;
     condition_json?: string; mode?: string; price_error?: string;
     is_fallback_price?: string; scan_id?: string;
+    // Set when loading an item from the portfolio dashboard.
+    price_at_creation?: string;
+    card_id_api?: string;
   }>();
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(p.mode === 'saved');
@@ -40,6 +43,42 @@ export default function CardDetailScreen() {
   const market = Number(p.market_price || '0');
   const estimated = Number(p.estimated_value || '0');
   const mult = Number(p.condition_multiplier || '1');
+
+  // Refetched live data for SAVED cards. We always refresh prices when the
+  // user reopens a saved card so the trend arrow reflects the latest market.
+  const [livePrice, setLivePrice] = useState<{ market: number; estimated: number } | null>(null);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const baselineAtSave = p.price_at_creation && p.price_at_creation !== ''
+    ? Number(p.price_at_creation) : null;
+  // Current "live" price drives the trend comparison. For brand-new scans we
+  // use the price we already computed in condition.tsx; for saved cards we
+  // refetch in the effect below.
+  const liveMarketPrice = livePrice?.market ?? market;
+  const liveEstimated = livePrice?.estimated ?? estimated;
+
+  // Refresh live prices for saved cards so the trend is meaningful.
+  useEffect(() => {
+    if (p.mode !== 'saved' || !p.name) return;
+    let cancelled = false;
+    setLiveLoading(true);
+    api.getPrice({
+      name: p.name,
+      set_name: p.set_name || undefined,
+      number: p.number || undefined,
+    })
+      .then((price) => {
+        if (cancelled) return;
+        const apiMarket = price.recommended_eur ?? price.cardmarket_trend
+          ?? price.cardmarket_average ?? price.tcgplayer_market ?? null;
+        if (apiMarket && apiMarket > 0) {
+          setLivePrice({ market: apiMarket, estimated: apiMarket * mult });
+        }
+      })
+      .catch(() => { /* fall back silently to the persisted snapshot */ })
+      .finally(() => { if (!cancelled) setLiveLoading(false); });
+    return () => { cancelled = true; };
+  }, [p.mode, p.name, p.set_name, p.number, mult]);
+
   // Prefer holofoil if we have it (most-collected variant). Fall back to whatever
   // single TCGplayer value the backend already picked.
   const tcgHolo = p.tcgplayer_holofoil_market && p.tcgplayer_holofoil_market !== ''
@@ -55,6 +94,18 @@ export default function CardDetailScreen() {
   const cm = cmTrend ?? cmAvg;
   const isFallback = p.is_fallback_price === '1';
   const priceSource = (p.price_source || '').toString();
+
+  // Trend = current live market vs. the price we recorded at save time.
+  // 1¢ tolerance to avoid flagging floating-point rounding as a change.
+  const trend: 'up' | 'down' | 'flat' | null = (() => {
+    if (p.mode !== 'saved' || baselineAtSave === null || liveMarketPrice <= 0) return null;
+    const diff = liveMarketPrice - baselineAtSave;
+    if (Math.abs(diff) < 0.01) return 'flat';
+    return diff > 0 ? 'up' : 'down';
+  })();
+  const trendDiff = (trend && baselineAtSave) ? liveMarketPrice - baselineAtSave : 0;
+  const trendPct = (trend && baselineAtSave && baselineAtSave > 0)
+    ? (trendDiff / baselineAtSave) * 100 : 0;
 
   // Image source priority: official card art (pokemontcg.io) → photo captured
   // by the user during the scan → static fallback (so nothing breaks for
@@ -86,6 +137,12 @@ export default function CardDetailScreen() {
         condition,
         condition_grade: p.condition_grade,
         condition_multiplier: mult,
+        tcgplayer_market: tcg,
+        cardmarket_average: cmAvg,
+        cardmarket_trend: cmTrend,
+        price_source: priceSource || null,
+        price_at_creation: market,
+        card_id: p.card_id_api || null,
       });
       // Free the in-memory capture once it's been persisted.
       scanStore.clear(p.scan_id);
@@ -214,8 +271,42 @@ export default function CardDetailScreen() {
 
         <View style={styles.estimateCard}>
           <Text style={styles.metaLabel}>{t.detail.estimatedValue}</Text>
-          <Text style={styles.estimateValue} testID="detail-estimated-value">{formatPrice(estimated)}</Text>
-          <Text style={styles.estimateSub}>{t.detail.estimatedSub(formatPrice(market), Math.round(mult * 100))}</Text>
+          <View style={styles.estimateValueRow}>
+            <Text style={styles.estimateValue} testID="detail-estimated-value">
+              {formatPrice(liveEstimated)}
+            </Text>
+            {trend && (
+              <View
+                style={[
+                  styles.detailTrendBadge,
+                  trend === 'up' && styles.detailTrendUp,
+                  trend === 'down' && styles.detailTrendDown,
+                ]}
+                testID={`detail-trend-${trend}`}
+              >
+                {liveLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.brand} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={trend === 'up' ? 'arrow-up' : trend === 'down' ? 'arrow-down' : 'remove'}
+                      size={14}
+                      color={trend === 'up' ? COLORS.success : trend === 'down' ? COLORS.error : COLORS.onSurfaceTertiary}
+                    />
+                    {trend !== 'flat' && (
+                      <Text style={[
+                        styles.detailTrendText,
+                        { color: trend === 'up' ? COLORS.success : COLORS.error },
+                      ]}>
+                        {trendPct > 0 ? '+' : ''}{trendPct.toFixed(1)}%
+                      </Text>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
+          </View>
+          <Text style={styles.estimateSub}>{t.detail.estimatedSub(formatPrice(liveMarketPrice), Math.round(mult * 100))}</Text>
         </View>
 
         <View style={styles.marketHeader}>
@@ -343,7 +434,18 @@ const styles = StyleSheet.create({
   gradeText: { color: COLORS.brand, fontSize: TYPE.xxl, fontWeight: '900', marginTop: 4 },
   gradeMult: { color: COLORS.onSurface, fontSize: TYPE.xxl, fontWeight: '900', marginTop: 4 },
   estimateCard: { backgroundColor: 'rgba(255,230,0,0.06)', borderColor: 'rgba(255,230,0,0.4)', borderWidth: 1, borderRadius: RADII.md, padding: SPACING.lg, marginBottom: SPACING.xl },
+  estimateValueRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexWrap: 'wrap' },
   estimateValue: { color: COLORS.brand, fontSize: 56, fontWeight: '900', marginTop: 6, letterSpacing: -1.5, textShadowColor: 'rgba(255,230,0,0.35)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
+  detailTrendBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: RADII.pill, marginTop: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1, borderColor: 'transparent',
+  },
+  detailTrendUp:   { backgroundColor: 'rgba(34,197,94,0.12)', borderColor: 'rgba(34,197,94,0.45)' },
+  detailTrendDown: { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.45)' },
+  detailTrendText: { fontWeight: '800', fontSize: TYPE.sm, letterSpacing: -0.2 },
   estimateSub: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, marginTop: 6 },
   retentionTrack: { height: 10, borderRadius: 999, marginTop: SPACING.md, overflow: 'hidden', backgroundColor: COLORS.surface, position: 'relative' },
   retentionMarker: { position: 'absolute', top: -3, width: 4, height: 16, backgroundColor: COLORS.brand, borderRadius: 2, marginLeft: -2, shadowColor: COLORS.brand, shadowOpacity: 0.9, shadowRadius: 6, shadowOffset: { width: 0, height: 0 } },
