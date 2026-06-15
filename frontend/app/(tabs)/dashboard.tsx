@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
   RefreshControl, TextInput, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -41,11 +41,47 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const { t, locale, toggleLocale } = useI18n();
+  // `deletedId` is set when navigating from card-detail's optimistic delete.
+  // We filter that row out of local state synchronously so the UI never
+  // lingers on a deleted card while the network DELETE settles.
+  const { deletedId: deletedIdParam } = useLocalSearchParams<{ deletedId?: string }>();
   const [cards, setCards] = useState<CardRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterKey>('recent');
+
+  // Apply optimistic deletion as soon as the param arrives.
+  const pendingDeletes = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!deletedIdParam) return;
+    pendingDeletes.current.add(deletedIdParam);
+    setCards((prev) => prev.filter((c) => c.id !== deletedIdParam));
+    // Drop the optimistic filter after the backend has had time to commit
+    // (and our follow-up load() reflects it).
+    const dropAfter = setTimeout(() => {
+      pendingDeletes.current.delete(deletedIdParam);
+    }, 4000);
+    // Clear the param so a subsequent tab focus doesn't re-apply it.
+    router.setParams({ deletedId: '' });
+    return () => clearTimeout(dropAfter);
+  }, [deletedIdParam, router]);
+
+  const load = useCallback(async () => {
+    if (!user) return;
+    try {
+      const data = await api.getPortfolio(user.uid);
+      // Defensive: filter out any rows still pending optimistic deletion so a
+      // racey portfolio GET (that arrives before the DELETE commit) doesn't
+      // resurrect the deleted card on screen.
+      setCards(data.filter((c) => !pendingDeletes.current.has(c.id)));
+    } catch (e) {
+      console.log('portfolio load err', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user]);
 
   // Localised filter chips. The condition labels stay literal (Mint / Near
   // Mint / …) because they are TCG grading terms recognized across markets.
@@ -63,20 +99,16 @@ export default function DashboardScreen() {
     [t.dashboard.filterRecent, t.dashboard.filterValue],
   );
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    try {
-      const data = await api.getPortfolio(user.uid);
-      setCards(data);
-    } catch (e) {
-      console.log('portfolio load err', e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [user]);
-
-  useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    // Only show the blocking spinner on the FIRST load. On subsequent tab
+    // focuses we keep the existing list visible and refresh it silently in
+    // the background, so the screen never feels frozen.
+    setCards((prev) => {
+      if (prev.length === 0) setLoading(true);
+      return prev;
+    });
+    load();
+  }, [load]));
   const onRefresh = () => { setRefreshing(true); load(); };
 
   const total = useMemo(
@@ -120,34 +152,54 @@ export default function DashboardScreen() {
     router.replace('/(auth)/login');
   };
 
-  // Refresh live prices for each saved card so we can show up/down trend
-  // arrows. We do this in parallel after the cards list is loaded. Each card
-  // keyed by id → its latest recommended_eur from pokemontcg.io.
+  // Live-price refresh: shows up/down trend arrows on saved cards.
+  //
+  // CRITICAL performance contract:
+  //  - We render the row IMMEDIATELY using the persisted price snapshot from
+  //    Mongo (price_at_creation / estimated_value). The screen never blocks
+  //    on the network.
+  //  - Each card's live price is fetched in the background, individually,
+  //    and the UI is patched as soon as that single fetch resolves.
+  //  - We never refetch the same (name/set/number) signature twice — vital
+  //    for fast deletes, since removing a card no longer triggers a full
+  //    re-fetch of the surviving cards (was the source of the lag).
   const [livePrices, setLivePrices] = useState<Record<string, number | null>>({});
+  const fetchedSignaturesRef = useRef<Set<string>>(new Set());
+  // Signature that uniquely identifies a card for pricing purposes.
+  const sig = (c: CardRecord) => `${c.id}|${c.name}|${c.set_name ?? ''}|${c.number ?? ''}`;
+
   useEffect(() => {
     if (cards.length === 0) return;
     let cancelled = false;
-    Promise.all(
-      cards.map((c) =>
-        api
-          .getPrice({
-            name: c.name,
-            set_name: c.set_name ?? undefined,
-            number: c.number ?? undefined,
-          })
-          .then((pr) => {
-            const m = pr.recommended_eur ?? pr.cardmarket_trend
-              ?? pr.cardmarket_average ?? pr.tcgplayer_market ?? null;
-            return [c.id, m] as const;
-          })
-          .catch(() => [c.id, null] as const),
-      ),
-    ).then((pairs) => {
-      if (cancelled) return;
-      const next: Record<string, number | null> = {};
-      pairs.forEach(([id, val]) => { next[id] = val; });
-      setLivePrices(next);
+
+    const toFetch = cards.filter((c) => !fetchedSignaturesRef.current.has(sig(c)));
+    if (toFetch.length === 0) return;
+
+    // Mark as fetched up-front so a rapid re-render doesn't fire duplicates.
+    toFetch.forEach((c) => fetchedSignaturesRef.current.add(sig(c)));
+
+    // Fire each request independently and patch state per card as it lands.
+    toFetch.forEach((c) => {
+      api
+        .getPrice({
+          name: c.name,
+          set_name: c.set_name ?? undefined,
+          number: c.number ?? undefined,
+        })
+        .then((pr) => {
+          if (cancelled) return;
+          const m = pr.recommended_eur ?? pr.cardmarket_trend
+            ?? pr.cardmarket_average ?? pr.tcgplayer_market ?? null;
+          setLivePrices((prev) => ({ ...prev, [c.id]: m }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // Forget the signature on failure so a future load() can retry it.
+          fetchedSignaturesRef.current.delete(sig(c));
+          setLivePrices((prev) => ({ ...prev, [c.id]: null }));
+        });
     });
+
     return () => { cancelled = true; };
   }, [cards]);
 

@@ -160,9 +160,17 @@ export default function CardDetailScreen() {
     Alert.alert(t.detail.removeConfirmTitle, t.detail.removeConfirmBody, [
       { text: t.common.cancel, style: 'cancel' },
       {
-        text: t.common.remove, style: 'destructive', onPress: async () => {
-          await api.deleteCard(p.id!);
-          router.replace('/(tabs)/dashboard');
+        text: t.common.remove, style: 'destructive', onPress: () => {
+          // Optimistic UX: leave the screen IMMEDIATELY and let the DELETE
+          // run in the background. The dashboard reads the `deletedId` query
+          // param and filters that row out of its local list right away, so
+          // the user never sees a spinner here.
+          const idToDelete = p.id!;
+          api.deleteCard(idToDelete).catch((err) => console.log('delete failed', err));
+          router.replace({
+            pathname: '/(tabs)/dashboard',
+            params: { deletedId: idToDelete },
+          });
         },
       },
     ]);
