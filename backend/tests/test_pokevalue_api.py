@@ -25,7 +25,7 @@ class TestScanCounter:
         assert r.status_code == 200
         body = r.json()
         assert body["count"] == 0
-        assert body["free_limit"] == 10
+        assert body["free_limit"] == 5
         assert body["is_pro"] is False
         assert body["user_id"] == self.user_id
 
@@ -48,20 +48,55 @@ class TestScanCounter:
         assert r2.json()["is_pro"] is True
 
 
-# ---------- Price lookup ----------
-def test_price_charizard(base_url):
-    r = requests.get(f"{base_url}/api/price", params={"name": "Charizard"})
+# ---------- Price lookup (live pokemontcg.io) ----------
+def test_price_charizard_full_fields(base_url):
+    """Charizard + set Base + #4 should return all new EUR price fields populated."""
+    r = requests.get(
+        f"{base_url}/api/price",
+        params={"name": "Charizard", "set_name": "Base", "number": "4"},
+        timeout=30,
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     assert "charizard" in body["name"].lower()
-    # at least one price source should be present
-    assert (body.get("tcgplayer_market") is not None) or (body.get("cardmarket_average") is not None), \
-        f"No prices returned: {body}"
+    assert body["currency"] == "EUR"
+    assert body["usd_to_eur_rate"] == 0.92
+    # recommended_eur must be non-null and positive for such a popular card
+    assert body.get("recommended_eur") is not None, f"recommended_eur missing: {body}"
+    assert body["recommended_eur"] > 0
+    # price_source must be populated
+    assert body.get("price_source"), f"price_source missing: {body}"
+    assert body["price_source"] in (
+        "cardmarket_trend", "cardmarket_avg",
+        "tcgplayer_holofoil", "tcgplayer_normal",
+    ) or body["price_source"].startswith("tcgplayer_")
+    # New fields must exist as keys (may be null if variant absent, but at least one should be set)
+    for key in ("tcgplayer_holofoil_market", "tcgplayer_normal_market",
+                "cardmarket_trend", "cardmarket_average"):
+        assert key in body, f"missing key {key}"
+
+
+def test_price_pikachu_cardmarket_priority(base_url):
+    """Pikachu (no set/number) → cardmarket_trend should drive recommended_eur."""
+    r = requests.get(f"{base_url}/api/price", params={"name": "Pikachu"}, timeout=30)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "pikachu" in body["name"].lower()
+    assert body.get("recommended_eur") is not None
+    # If cardmarket_trend has a value, that's exactly what recommended_eur must equal
+    cm_trend = body.get("cardmarket_trend")
+    if cm_trend:
+        assert body["price_source"] == "cardmarket_trend"
+        assert abs(body["recommended_eur"] - cm_trend) < 0.01
 
 
 def test_price_unknown_returns_404(base_url):
-    r = requests.get(f"{base_url}/api/price", params={"name": "ZZZNonExistentPokemonCardZZZ"})
-    assert r.status_code == 404
+    r = requests.get(
+        f"{base_url}/api/price",
+        params={"name": "ThisCardDoesNotExistZZZ12345"},
+        timeout=30,
+    )
+    assert r.status_code == 404, f"Expected 404 got {r.status_code}: {r.text[:200]}"
 
 
 # ---------- Portfolio CRUD ----------

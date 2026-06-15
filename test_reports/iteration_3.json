@@ -1,0 +1,34 @@
+{
+  "summary": "Backend + Frontend validated end-to-end for the live-price feature. Backend: 10/10 pytest tests pass (1 skipped — no /tmp/card_small.jpg fixture for Gemini). Updated /app/backend/tests/test_pokevalue_api.py with three new price tests (charizard full fields, pikachu cardmarket priority, unknown→404) and fixed free_limit from 10→5. Verified /api/price?name=Charizard&set_name=Base&number=4 returns recommended_eur=271.43, price_source='cardmarket_trend', tcgplayer_holofoil_market=401.54, tcgplayer_normal_market=null, cardmarket_trend=271.43, cardmarket_average=216.53, usd_to_eur_rate=0.92, currency='EUR'. /api/price?name=Pikachu also resolves cardmarket_trend as recommended_eur. /api/price?name=ThisCardDoesNotExistZZZ12345 returns 404 cleanly. Frontend (mobile viewport 390×844): deep-linked into /condition with Charizard/Base/4, tapped Calculate value — price-loading-overlay APPEARED with the localized 'Fetching live prices…' / 'Querying Cardmarket and TCGplayer on pokemontcg.io.' card, then routed to /card-detail. price-source-label renders 'via Cardmarket Trend (EUR)'. Estimated value math correct: at Near Mint (mult=0.92) → 271.43 × 0.92 = 249.72 €; at all-Mint/no whitening/no scratches (mult=1.0) → estimated = 271.43 € exactly equals recommended_eur. Share button present (testID=detail-share). All four condition aspects translated in EN ('Adjust Centering', 'Corners', 'Edges', 'Surface'); locale-toggle regression covered in iter_2. No backend regressions, no new red-screen errors. React-Native deprecation warnings (shadow*/textShadow*/pointerEvents) are pre-existing — not in scope this iteration.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      { "component": "shadow*/textShadow*/pointerEvents (pre-existing)", "issue": "RN web still warns: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' / '\"textShadow*\" style props are deprecated. Use \"textShadow\".' / 'props.pointerEvents is deprecated. Use style.pointerEvents'. Same warnings as iteration_2 — non-blocking. References: condition.tsx:202 (pointerEvents), card-detail.tsx:331/334 (textShadow/shadow*)." }
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_3.json",
+    "/app/backend/tests/test_pokevalue_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Migrate shadow* / textShadow* / pointerEvents to the new RN web-supported props to silence console warnings (carry-over from iter_2)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:/api/price — progressive query fallback (name+number+set → name+number → name+set → name) correctly walks the candidates and breaks on first hit; HTTPException(404) raised when nothing matches. No httpx.raise_for_status() that would 502 on a transient pokemontcg.io 404. ✅",
+    "server.py — recommended_eur priority (cardmarket_trend → cardmarket_avg → tcgplayer_holofoil → tcgplayer_normal → tcgplayer_other) matches the product spec.",
+    "condition.tsx:57-63 — uses price.recommended_eur as primary, falls through to cardmarket_trend → cardmarket_average → tcgplayer_market → FALLBACK. is_fallback_price flag correctly set only when apiMarket is null/0.",
+    "card-detail.tsx:223-231 — price-source-label is rendered only when !isFallback && priceSource, and dynamically maps to the i18n strings for all 5 source variants — clean.",
+    "test_pokevalue_api.py — TestScanCounter.test_increment_count assumes the user starts at 0 then ends at 2; this is fine for a fresh TEST_user_<uuid> in MongoDB."
+  ],
+  "updated_files": ["/app/backend/tests/test_pokevalue_api.py"],
+  "success_rate": { "backend": "100% (10/10, 1 skipped fixture-dependent)", "frontend": "100% on requested flow items" },
+  "seed_data_creation": "None. Firebase test user testuser+pv@example.com / TestPass123! reused from iter_2. Pytest test users are auto-generated with TEST_ prefix per run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Live-price feature is fully working end-to-end on https://card-scanner-pro-8.preview.emergentagent.com. Backend price endpoint correctly returns the new PriceResponse fields with cardmarket_trend driving recommended_eur for popular cards. Frontend overlay (price-loading-overlay) + price-source-label badge + estimated-value math all verified. The condition deep-link route (`/condition?name=...&set_name=...&number=...`) works without prior scan, useful for future automated tests that can't perform a real camera scan. For all-Mint condition, estimated_value equals recommended_eur to the cent (271,43 €). Pre-existing RN web deprecation warnings remain.",
+  "rca_of_issue": "N/A — this iteration is a feature validation, not a bug. The previous-iteration 100€ placeholder was the symptom of using a constant FALLBACK_MARKET_PRICE; the fix correctly wires recommended_eur (Cardmarket trend EUR) into the frontend formula and now produces realistic live values for every popular card we tested."
+}

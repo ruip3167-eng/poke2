@@ -68,9 +68,18 @@ class PriceResponse(BaseModel):
     set_name: Optional[str] = None
     number: Optional[str] = None
     image_url: Optional[str] = None
-    tcgplayer_market: Optional[float] = None
-    cardmarket_average: Optional[float] = None
-    cardmarket_trend: Optional[float] = None
+    # Raw market data straight from pokemontcg.io
+    tcgplayer_market: Optional[float] = None            # USD → EUR converted, best variant
+    tcgplayer_holofoil_market: Optional[float] = None   # USD → EUR converted
+    tcgplayer_normal_market: Optional[float] = None     # USD → EUR converted
+    tcgplayer_variant: Optional[str] = None             # which variant was used
+    cardmarket_average: Optional[float] = None          # EUR (cardmarket is European)
+    cardmarket_trend: Optional[float] = None            # EUR
+    # Best EUR price we recommend the UI use as the base for the wear formula.
+    # Priority: cardmarket.trendPrice → cardmarket.averageSellPrice → tcgplayer (USD→EUR).
+    recommended_eur: Optional[float] = None
+    price_source: Optional[str] = None  # 'cardmarket_trend' | 'cardmarket_avg' | 'tcgplayer_holofoil' | 'tcgplayer_normal' | 'tcgplayer_other'
+    usd_to_eur_rate: float = 0.92
     currency: str = "EUR"
 
 
@@ -357,60 +366,109 @@ async def scan_analyze(payload: ScanAnalyzeRequest):
 @api.get("/price", response_model=PriceResponse)
 async def price(name: str, set_name: Optional[str] = None, number: Optional[str] = None):
     """Query pokemontcg.io for the best-matching card and its prices."""
-    # Build the query
+    # Build progressive query candidates: most specific → least specific.
+    # pokemontcg.io occasionally returns 404 (yes, really) on combined
+    # name+number queries even when each clause individually returns hits,
+    # so we walk down the list until something hits.
     name_clean = name.strip()
-    q_parts = [f'name:"{name_clean}"']
+    num: Optional[str] = None
     if number:
-        # number may look like "25/102" — use just the left part
-        num = number.split("/")[0].strip()
-        if num:
-            q_parts.append(f"number:{num}")
+        n = number.split("/")[0].strip()
+        if n:
+            num = n
+    set_clean: Optional[str] = None
     if set_name:
-        # match against set.name
         s = set_name.replace('"', "").strip()
         if s:
-            q_parts.append(f'set.name:"{s}"')
-    q = " ".join(q_parts)
+            set_clean = s
+
+    queries: list[str] = []
+    base_name = f'name:"{name_clean}"'
+    if num and set_clean:
+        queries.append(f'{base_name} number:{num} set.name:"{set_clean}"')
+    if num:
+        queries.append(f'{base_name} number:{num}')
+    if set_clean:
+        queries.append(f'{base_name} set.name:"{set_clean}"')
+    queries.append(base_name)
 
     url = "https://api.pokemontcg.io/v2/cards"
+    cards: list[dict] = []
+    last_err: Optional[str] = None
     try:
         async with httpx.AsyncClient(timeout=20) as http:
-            r = await http.get(url, params={"q": q, "pageSize": 10})
-            if r.status_code != 200:
-                # retry with just name
-                r = await http.get(url, params={"q": f'name:"{name_clean}"', "pageSize": 10})
-            r.raise_for_status()
-            data = r.json()
+            for q in queries:
+                try:
+                    r = await http.get(url, params={"q": q, "pageSize": 10})
+                except Exception as e:
+                    last_err = str(e)
+                    continue
+                if r.status_code != 200:
+                    last_err = f"HTTP {r.status_code}"
+                    continue
+                payload = r.json() or {}
+                if payload.get("data"):
+                    cards = payload["data"]
+                    break
     except Exception as e:
-        logger.exception("pokemontcg.io failed")
+        logger.exception("pokemontcg.io request failed")
         raise HTTPException(502, f"Price API error: {e}")
 
-    cards = data.get("data") or []
     if not cards:
-        raise HTTPException(404, f"No price data found for '{name_clean}'.")
+        raise HTTPException(404, f"No price data found for '{name_clean}'.{(' ' + last_err) if last_err else ''}")
 
     card = cards[0]
-    # extract tcgplayer (USD) and cardmarket (EUR) prices
-    tcg = ((card.get("tcgplayer") or {}).get("prices") or {})
-    # tcgplayer prices object has variants — pick the first variant with a market price
-    market = None
-    for variant_key, variant in tcg.items():
-        if isinstance(variant, dict) and variant.get("market"):
-            market = float(variant["market"])
-            break
-        if isinstance(variant, dict) and variant.get("mid"):
-            market = float(variant["mid"])
-            break
 
-    # Convert TCGplayer USD → EUR for our European audience. Static rate is
-    # fine for an MVP; swap for a live FX feed when needed.
+    # ── TCGplayer (USD) ────────────────────────────────────────────────────
+    # The API exposes prices per *variant*: holofoil, normal, reverseHolofoil,
+    # 1stEditionHolofoil, unlimitedHolofoil, etc. We prefer holofoil (most
+    # collectable) then normal, then any remaining variant.
     USD_TO_EUR = 0.92
-    if market is not None:
-        market = round(market * USD_TO_EUR, 2)
+    tcg = ((card.get("tcgplayer") or {}).get("prices") or {})
 
+    def _pick(variant_dict: dict) -> Optional[float]:
+        if not isinstance(variant_dict, dict):
+            return None
+        return variant_dict.get("market") or variant_dict.get("mid")
+
+    def _usd_to_eur(v: Optional[float]) -> Optional[float]:
+        return round(float(v) * USD_TO_EUR, 2) if v else None
+
+    tcg_holo_eur = _usd_to_eur(_pick(tcg.get("holofoil") or {}))
+    tcg_norm_eur = _usd_to_eur(_pick(tcg.get("normal") or {}))
+
+    # Choose a single TCGplayer EUR value + variant label.
+    tcg_market_eur: Optional[float] = None
+    tcg_variant: Optional[str] = None
+    if tcg_holo_eur is not None:
+        tcg_market_eur, tcg_variant = tcg_holo_eur, "holofoil"
+    elif tcg_norm_eur is not None:
+        tcg_market_eur, tcg_variant = tcg_norm_eur, "normal"
+    else:
+        for variant_key, variant in tcg.items():
+            v = _pick(variant)
+            if v:
+                tcg_market_eur, tcg_variant = _usd_to_eur(v), str(variant_key)
+                break
+
+    # ── Cardmarket (already EUR — European marketplace) ────────────────────
     cm = (card.get("cardmarket") or {}).get("prices") or {}
-    cm_avg = cm.get("averageSellPrice") or cm.get("avg30") or cm.get("trendPrice")
     cm_trend = cm.get("trendPrice")
+    cm_avg = cm.get("averageSellPrice") or cm.get("avg30")
+    cm_trend_f = float(cm_trend) if cm_trend else None
+    cm_avg_f = float(cm_avg) if cm_avg else None
+
+    # ── Recommended EUR price ─────────────────────────────────────────────
+    # Priority: Cardmarket trend (live EU market) → Cardmarket avg → TCGplayer.
+    recommended_eur: Optional[float] = None
+    price_source: Optional[str] = None
+    if cm_trend_f and cm_trend_f > 0:
+        recommended_eur, price_source = cm_trend_f, "cardmarket_trend"
+    elif cm_avg_f and cm_avg_f > 0:
+        recommended_eur, price_source = cm_avg_f, "cardmarket_avg"
+    elif tcg_market_eur and tcg_market_eur > 0:
+        recommended_eur = tcg_market_eur
+        price_source = f"tcgplayer_{tcg_variant}" if tcg_variant else "tcgplayer_other"
 
     return PriceResponse(
         card_id=card.get("id"),
@@ -419,9 +477,15 @@ async def price(name: str, set_name: Optional[str] = None, number: Optional[str]
         number=card.get("number"),
         image_url=((card.get("images") or {}).get("large")
                    or (card.get("images") or {}).get("small")),
-        tcgplayer_market=market,
-        cardmarket_average=float(cm_avg) if cm_avg else None,
-        cardmarket_trend=float(cm_trend) if cm_trend else None,
+        tcgplayer_market=tcg_market_eur,
+        tcgplayer_holofoil_market=tcg_holo_eur,
+        tcgplayer_normal_market=tcg_norm_eur,
+        tcgplayer_variant=tcg_variant,
+        cardmarket_average=cm_avg_f,
+        cardmarket_trend=cm_trend_f,
+        recommended_eur=recommended_eur,
+        price_source=price_source,
+        usd_to_eur_rate=USD_TO_EUR,
         currency="EUR",
     )
 

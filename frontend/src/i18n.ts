@@ -88,6 +88,8 @@ const pt = {
     grade: 'Estado',
     valueRetained: 'Valor mantido',
     calculate: 'Calcular valor',
+    fetchingTitle: 'A buscar preços ao vivo…',
+    fetchingSub: 'Consultando Cardmarket e TCGplayer no pokemontcg.io.',
   },
   detail: {
     condition: 'Estado',
@@ -95,6 +97,11 @@ const pt = {
     estimatedValue: 'Valor Estimado',
     estimatedSub: (market: string, pct: number) => `${market} × ${pct}% condição`,
     liveMarket: 'Mercado ao vivo',
+    sourceCardmarketTrend: 'via Cardmarket Trend (EUR)',
+    sourceCardmarketAvg: 'via Cardmarket Avg (EUR)',
+    sourceTcgHolofoil: 'via TCGplayer Holofoil (USD→EUR)',
+    sourceTcgNormal: 'via TCGplayer Normal (USD→EUR)',
+    sourceTcgOther: (variant: string) => `via TCGplayer ${variant} (USD→EUR)`,
     demoNotice: (market: string) =>
       `Preço demo: esta carta ainda não está no nosso feed ao vivo, por isso usamos um valor de mercado de referência de ${market}.`,
     addToPortfolio: 'Adicionar ao portfólio',
@@ -226,6 +233,8 @@ const en: typeof pt = {
     grade: 'Grade',
     valueRetained: 'Value retained',
     calculate: 'Calculate value',
+    fetchingTitle: 'Fetching live prices…',
+    fetchingSub: 'Querying Cardmarket and TCGplayer on pokemontcg.io.',
   },
   detail: {
     condition: 'Condition',
@@ -233,6 +242,11 @@ const en: typeof pt = {
     estimatedValue: 'Estimated Value',
     estimatedSub: (market: string, pct: number) => `${market} × ${pct}% condition`,
     liveMarket: 'Live market',
+    sourceCardmarketTrend: 'via Cardmarket Trend (EUR)',
+    sourceCardmarketAvg: 'via Cardmarket Avg (EUR)',
+    sourceTcgHolofoil: 'via TCGplayer Holofoil (USD→EUR)',
+    sourceTcgNormal: 'via TCGplayer Normal (USD→EUR)',
+    sourceTcgOther: (variant: string) => `via TCGplayer ${variant} (USD→EUR)`,
     demoNotice: (market: string) =>
       `Demo price: this card isn't in our live price feed yet, so we're using a placeholder market value of ${market}.`,
     addToPortfolio: 'Add to portfolio',

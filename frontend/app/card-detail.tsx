@@ -24,7 +24,10 @@ export default function CardDetailScreen() {
   const p = useLocalSearchParams<{
     id?: string;
     name: string; set_name?: string; number?: string; image_url?: string;
-    market_price: string; tcgplayer_market?: string; cardmarket_average?: string;
+    market_price: string;
+    tcgplayer_market?: string; tcgplayer_holofoil_market?: string; tcgplayer_normal_market?: string;
+    cardmarket_average?: string; cardmarket_trend?: string;
+    price_source?: string;
     estimated_value: string; condition_grade: string; condition_multiplier: string;
     condition_json?: string; mode?: string; price_error?: string;
     is_fallback_price?: string; scan_id?: string;
@@ -37,9 +40,21 @@ export default function CardDetailScreen() {
   const market = Number(p.market_price || '0');
   const estimated = Number(p.estimated_value || '0');
   const mult = Number(p.condition_multiplier || '1');
-  const tcg = p.tcgplayer_market && p.tcgplayer_market !== '' ? Number(p.tcgplayer_market) : null;
-  const cm = p.cardmarket_average && p.cardmarket_average !== '' ? Number(p.cardmarket_average) : null;
+  // Prefer holofoil if we have it (most-collected variant). Fall back to whatever
+  // single TCGplayer value the backend already picked.
+  const tcgHolo = p.tcgplayer_holofoil_market && p.tcgplayer_holofoil_market !== ''
+    ? Number(p.tcgplayer_holofoil_market) : null;
+  const tcgGeneric = p.tcgplayer_market && p.tcgplayer_market !== ''
+    ? Number(p.tcgplayer_market) : null;
+  const tcg = tcgHolo ?? tcgGeneric;
+  // Prefer Cardmarket trend (real-time EU market) over averageSellPrice.
+  const cmTrend = p.cardmarket_trend && p.cardmarket_trend !== ''
+    ? Number(p.cardmarket_trend) : null;
+  const cmAvg = p.cardmarket_average && p.cardmarket_average !== ''
+    ? Number(p.cardmarket_average) : null;
+  const cm = cmTrend ?? cmAvg;
   const isFallback = p.is_fallback_price === '1';
+  const priceSource = (p.price_source || '').toString();
 
   // Image source priority: official card art (pokemontcg.io) → photo captured
   // by the user during the scan → static fallback (so nothing breaks for
@@ -203,7 +218,18 @@ export default function CardDetailScreen() {
           <Text style={styles.estimateSub}>{t.detail.estimatedSub(formatPrice(market), Math.round(mult * 100))}</Text>
         </View>
 
-        <Text style={styles.section}>{t.detail.liveMarket}</Text>
+        <View style={styles.marketHeader}>
+          <Text style={styles.section}>{t.detail.liveMarket}</Text>
+          {!isFallback && priceSource ? (
+            <Text style={styles.sourceLabel} testID="price-source-label">
+              {priceSource === 'cardmarket_trend' ? t.detail.sourceCardmarketTrend
+                : priceSource === 'cardmarket_avg' ? t.detail.sourceCardmarketAvg
+                : priceSource === 'tcgplayer_holofoil' ? t.detail.sourceTcgHolofoil
+                : priceSource === 'tcgplayer_normal' ? t.detail.sourceTcgNormal
+                : t.detail.sourceTcgOther(priceSource.replace('tcgplayer_', ''))}
+            </Text>
+          ) : null}
+        </View>
         <View style={styles.marketRow}>
           <View style={styles.marketCard}>
             <View style={styles.marketIcon}><Ionicons name="cash-outline" size={16} color={COLORS.brand} /></View>
@@ -309,6 +335,8 @@ const styles = StyleSheet.create({
   retentionLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACING.xs },
   retentionLabelTxt: { color: COLORS.onSurfaceTertiary, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
   section: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '700', marginBottom: SPACING.md },
+  marketHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: SPACING.sm },
+  sourceLabel: { color: COLORS.brand, fontSize: TYPE.xs, fontWeight: '700', letterSpacing: 0.3 },
   marketRow: { flexDirection: 'row', gap: SPACING.md },
   marketCard: { flex: 1, backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADII.md, borderWidth: 1, borderColor: COLORS.border },
   marketIcon: { width: 32, height: 32, borderRadius: RADII.pill, backgroundColor: COLORS.brandSoft, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.sm },

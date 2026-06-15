@@ -52,9 +52,13 @@ export default function ConditionScreen() {
         set_name: params.set_name || undefined,
         number: params.number || undefined,
       });
-      // Prefer TCGplayer USD market, then Cardmarket average. If both missing,
-      // fall back to a fictitious base value so the user always sees a number.
-      const apiMarket = price.tcgplayer_market ?? price.cardmarket_average ?? null;
+      // The backend already picks the best EUR price for us
+      // (Cardmarket trend → Cardmarket avg → TCGplayer USD→EUR).
+      const apiMarket = price.recommended_eur
+        ?? price.cardmarket_trend
+        ?? price.cardmarket_average
+        ?? price.tcgplayer_market
+        ?? null;
       const isFallback = apiMarket === null || apiMarket === 0;
       const market = isFallback ? FALLBACK_MARKET_PRICE : (apiMarket as number);
       const estimated = market * multiplier;
@@ -68,7 +72,11 @@ export default function ConditionScreen() {
           image_url: price.image_url ?? '',
           market_price: String(market),
           tcgplayer_market: String(price.tcgplayer_market ?? ''),
+          tcgplayer_holofoil_market: String(price.tcgplayer_holofoil_market ?? ''),
+          tcgplayer_normal_market: String(price.tcgplayer_normal_market ?? ''),
           cardmarket_average: String(price.cardmarket_average ?? ''),
+          cardmarket_trend: String(price.cardmarket_trend ?? ''),
+          price_source: price.price_source ?? '',
           estimated_value: String(estimated),
           condition_grade: grade,
           condition_multiplier: String(multiplier),
@@ -113,6 +121,17 @@ export default function ConditionScreen() {
         <Text style={styles.headerTitle}>{t.condition.title}</Text>
         <View style={{ width: 40 }} />
       </View>
+
+      {/* Full-screen overlay while we fetch live prices from pokemontcg.io. */}
+      {loading && (
+        <View style={styles.loadingOverlay} testID="price-loading-overlay" pointerEvents="auto">
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={COLORS.brand} size="large" />
+            <Text style={styles.loadingTitle}>{t.condition.fetchingTitle}</Text>
+            <Text style={styles.loadingSub}>{t.condition.fetchingSub}</Text>
+          </View>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.banner}>
@@ -233,4 +252,23 @@ const styles = StyleSheet.create({
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACING.lg, backgroundColor: 'rgba(10,11,14,0.96)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.divider },
   cta: { backgroundColor: COLORS.brand, paddingVertical: SPACING.lg, borderRadius: RADII.md, alignItems: 'center', minHeight: 52, justifyContent: 'center' },
   ctaText: { color: COLORS.onBrand, fontWeight: '900', fontSize: TYPE.lg },
+  loadingOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(10,11,14,0.85)',
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 10,
+  },
+  loadingCard: {
+    backgroundColor: COLORS.surfaceSecondary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.xl,
+    borderRadius: RADII.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,230,0,0.3)',
+    alignItems: 'center',
+    minWidth: 260,
+    gap: SPACING.md,
+  },
+  loadingTitle: { color: COLORS.onSurface, fontSize: TYPE.lg, fontWeight: '800', textAlign: 'center' },
+  loadingSub: { color: COLORS.onSurfaceTertiary, fontSize: TYPE.sm, textAlign: 'center' },
 });

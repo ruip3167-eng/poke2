@@ -32,8 +32,14 @@ export interface PriceData {
   number?: string | null;
   image_url?: string | null;
   tcgplayer_market?: number | null;
+  tcgplayer_holofoil_market?: number | null;
+  tcgplayer_normal_market?: number | null;
+  tcgplayer_variant?: string | null;
   cardmarket_average?: number | null;
   cardmarket_trend?: number | null;
+  recommended_eur?: number | null;
+  price_source?: string | null;
+  usd_to_eur_rate?: number;
   currency: string;
 }
 
