@@ -298,6 +298,22 @@ export default function CardDetailScreen() {
           </View>
         </View>
 
+        {/* "Fix card" pill — sits between the Condition block and the
+            Estimated Value card so the user can correct an AI
+            misidentification (or pick the right variant) right where they
+            are inspecting the grading. Hidden for saved-portfolio entries
+            where the Add-to-portfolio CTA isn't visible. */}
+        {!isFallback && p.mode !== 'saved' && (
+          <Pressable
+            testID="detail-fix-card-pill"
+            onPress={openManualFix}
+            style={({ pressed }) => [styles.fixCardPill, pressed && { opacity: 0.85 }]}
+          >
+            <Ionicons name="search-outline" size={14} color={COLORS.brand} />
+            <Text style={styles.fixCardPillText}>{t.detail.fixCard}</Text>
+          </Pressable>
+        )}
+
         <View style={styles.estimateCard}>
           <Text style={styles.metaLabel}>{t.detail.estimatedValue}</Text>
           <View style={styles.estimateValueRow}>
@@ -397,21 +413,6 @@ export default function CardDetailScreen() {
               </View>
             </View>
           </View>
-        )}
-
-        {/* Discrete pill for non-fallback cards: still allows the user to
-            correct an AI misidentification even when the live price IS
-            populated (the card the scanner picked could be the wrong
-            variant). Hidden on already-saved cards. */}
-        {!isFallback && p.mode !== 'saved' && (
-          <Pressable
-            testID="detail-fix-card-pill"
-            onPress={openManualFix}
-            style={({ pressed }) => [styles.fixCardPill, pressed && { opacity: 0.85 }]}
-          >
-            <Ionicons name="search-outline" size={14} color={COLORS.brand} />
-            <Text style={styles.fixCardPillText}>{t.detail.fixCard}</Text>
-          </Pressable>
         )}
 
         {!isFallback && p.price_error && (

@@ -76,7 +76,7 @@ const pt = {
   },
   manualSearch: {
     title: 'Procura Manual',
-    subtitle: 'Escolhe a coleção e introduz o número impresso na carta.',
+    subtitle: 'Escolhe a coleção e introduz o nome do pokémon',
     setLabel: 'Coleção',
     setPlaceholder: 'Selecionar coleção…',
     setSearchPlaceholder: 'Procurar coleção…',
@@ -250,7 +250,7 @@ const en: typeof pt = {
   },
   manualSearch: {
     title: 'Manual Search',
-    subtitle: 'Pick the set and enter the number printed on the card.',
+    subtitle: 'Choose the collection and enter the pokémon name',
     setLabel: 'Set',
     setPlaceholder: 'Choose a set…',
     setSearchPlaceholder: 'Search set…',

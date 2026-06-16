@@ -303,7 +303,23 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, borderRadius: RADII.pill, backgroundColor: 'rgba(20,22,28,0.7)', alignItems: 'center', justifyContent: 'center' },
   counterPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(20,22,28,0.8)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: RADII.pill, borderWidth: 1, borderColor: COLORS.border },
   counterText: { color: COLORS.onSurfaceSecondary, fontSize: TYPE.sm, fontWeight: '700' },
-  hint: { position: 'absolute', alignSelf: 'center', top: '74%', color: COLORS.onSurface, fontSize: TYPE.base, fontWeight: '600', backgroundColor: 'rgba(10,11,14,0.6)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: RADII.pill },
+  hint: {
+    position: 'absolute',
+    alignSelf: 'center',
+    // Sit directly under the PRO/Free counter pill in the top bar — no
+    // background so the camera frame stays unobstructed.
+    top: Platform.OS === 'ios' ? 110 : 88,
+    color: COLORS.onSurface,
+    fontSize: TYPE.sm,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingHorizontal: SPACING.lg,
+    // Subtle text shadow ensures legibility over bright camera frames
+    // without painting a visible chip on top of the image.
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   errorBanner: { position: 'absolute', top: '12%', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(20,22,28,0.92)', borderColor: COLORS.error, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADII.md, maxWidth: '85%' },
   errorText: { color: COLORS.onSurface, fontSize: TYPE.sm, flex: 1 },
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0 },

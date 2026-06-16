@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only verification of 3 surgical UI polish fixes. All three changes are correctly implemented and verified live: (1) scan-hint is rendered at top:88px, position:absolute, with NO backgroundColor (computed rgba(0,0,0,0) = transparent) and proper textShadow; (2) card-detail children order for mode=new is gradeBlock (value-retained-bar) → detail-fix-card-pill → estimateCard (Estimated Value) — confirmed via getBoundingClientRect (479 → 545 → 613); (3) detail-fix-card-pill is correctly HIDDEN for mode=saved; (4) manual-search subtitle reads exactly 'Choose the collection and enter the pokémon name' in EN, the OLD strings ('Pick the set and enter the number printed on the card.' / 'Escolhe a coleção e introduz o número impresso na carta.') no longer appear anywhere in the DOM. PT subtitle string is correctly defined in /app/frontend/src/i18n.ts as 'Escolhe a coleção e introduz o nome do pokémon' (locale toggle not exercised in UI but source verified). Backend skipped per request.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "scan.tsx styles.hint", "issue": "react-native-web deprecation warning: 'textShadow*' style props are deprecated. Use 'textShadow'. (non-blocking — visual rendering correct). Reference: /app/frontend/app/(tabs)/scan.tsx:319-321"},
+      {"component": "global", "issue": "react-native-web deprecation warning: 'shadow*' style props are deprecated. Use 'boxShadow'. Multiple components use shadowColor/shadowOpacity/shadowRadius (not introduced by this change but appears in console). Non-blocking."}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "No fixes needed for the three requested changes — all verified working.",
+    "Optional cleanup (low priority): migrate textShadow* (scan.tsx hint, card-detail estimateValue) and shadow* (theme shadows) to the new react-native-web 'textShadow'/'boxShadow' shorthand to silence deprecation warnings."
+  ],
+  "critical_code_review_comments": [
+    "card-detail.tsx is now 580 lines — approaching the 700-line guidance threshold; consider splitting (e.g. extract LiveMarket block + FixCardPill into sub-components) on the next refactor.",
+    "scan.tsx hint top uses Platform.OS === 'ios' ? 110 : 88 — on web Platform.OS is 'web' so the 88 branch is used in the preview (matches the spec range 88–110)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "skipped", "frontend": "100%" },
+  "seed_data_creation": "None — used existing test user testuser+pv@example.com and ad-hoc URL params for /card-detail.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Verified live values: scan-hint computed { position: 'absolute', top: '88px', backgroundColor: 'rgba(0,0,0,0)', textShadow: 'rgba(0,0,0,0.85) 0px 1px 3px' }. Card-detail (mode=new, is_fallback_price=0) rect tops: value-retained-bar=479, detail-fix-card-pill=545, detail-estimated-value=613. mode=saved → detail-fix-card-pill not rendered. /manual-search shows EN 'Choose the collection and enter the pokémon name'.",
+  "rca_of_issue": "N/A — no defects found."
+}
