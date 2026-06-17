@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "PokeValue Scanner",
+    "slug": "pokevalue-scanner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.pokevalue.scannerapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app requires camera access to scan and identify your physical Pokémon cards."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#121212"
+      },
+      "package": "com.pokevalue.scannerapp",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "This app requires camera access to scan and identify your physical Pokémon cards."
+        }
+      ]
+    ]
+  }
+}
