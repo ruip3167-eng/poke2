@@ -22,8 +22,11 @@
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "CAMERA"
-      ]
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.joboss.pokevaluescanner"
     },
     "web": {
       "bundler": "metro",
@@ -52,6 +55,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "084de561-7677-4106-9b77-8e5c32607e26"
+      }
     }
   }
 }
