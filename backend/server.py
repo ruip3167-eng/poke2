@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 """
 PokeValue Scanner backend
 - Gemini Vision for card recognition
