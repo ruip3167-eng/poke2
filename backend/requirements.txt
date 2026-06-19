@@ -1,7 +1,4 @@
 fastapi
 uvicorn
 motor
-pydantic
-starlette
-pillow
 google-generativeai
