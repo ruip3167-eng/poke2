@@ -50,7 +50,6 @@ async def real_send_message_patch(self, message, *args, **kwargs):
     image_parts = []
     contents = message if isinstance(message, list) else [message]
 
-    
     for c in contents:
         if isinstance(c, str):
             prompt += c
@@ -69,11 +68,13 @@ async def real_send_message_patch(self, message, *args, **kwargs):
                 
             image_parts.append({"mime_type": "image/jpeg", "data": b64_data})
             
-    # Altere o prompt para forçar um JSON super simples e direto
-        prompt_strict = f"{prompt}\nAnalyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number', and 'confidence'. Do not explain anything."
+    # Altere o prompt para forçar um JSON super simples e direto (Indentaçao Corrigida)
+    prompt_strict = f"{prompt}\nAnalyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number', and 'confidence'. Do not explain anything."
     
+    # Formato oficial moderno para enviar imagem em dicionário no Gemini 1.5
     response = model.generate_content([prompt_strict] + image_parts)
     text_clean = response.text
+
     
     if "```json" in text_clean:
         text_clean = text_clean.split("```json")[1].split("```")[0]
@@ -460,7 +461,6 @@ async def scan_analyze(payload: ScanAnalyzeRequest):
     )
 
     try:
-        import google.generativeai as genai
         import base64
         import io
         from PIL import Image
