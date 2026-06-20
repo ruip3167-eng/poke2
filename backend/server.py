@@ -37,18 +37,19 @@ async def real_send_message_patch(self, message, *args, **kwargs):
         return await self.complete(message)
     elif hasattr(self, 'chat'):
         return await self.chat(message)
-    # Se a biblioteca local for uma casca vazia, liga diretamente à API oficial da Google
-        import google.generativeai as genai
-        import os
-        
-        genai.configure(api_key=os.environ.get("EMERGENT_LLM_KEY"))
-        model = genai.GenerativeModel('gemini-1.5-flash')
-
     
+    # Se a biblioteca local for uma casca vazia, liga diretamente à API oficial
+    import google.generativeai as genai
+    import os
+
+    genai.configure(api_key=os.environ.get("EMERGENT_LLM_KEY"))
+    model = genai.GenerativeModel('gemini-1.5-flash')
+
     # Processa os conteúdos enviados (texto e base64 da imagem)
     prompt = ""
     image_parts = []
     contents = message if isinstance(message, list) else [message]
+
     
     for c in contents:
         if isinstance(c, str):
