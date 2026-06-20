@@ -70,18 +70,22 @@ for c in contents:
 # Altere o prompt para forçar um JSON super simples e direto
 prompt_strict = f"{prompt}\nAnalyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number', and 'confidence'. Do not explain anything."
 
-response = model.generate_content([prompt_strict] + image_parts)
-text_clean = response.text
+    response = model.generate_content([prompt_strict] + image_parts)
+    text_clean = response.text
 
-    
-    if "```json" in text_clean:
-        text_clean = text_clean.split("```json")[1].split("```")[0]
-    elif "```" in text_clean:
-        text_clean = text_clean.split("```")[1].split("```")[0]
-    elif "{" in text_clean and "}" in text_clean:
-        start = text_clean.find("{")
-        end = text_clean.rfind("}") + 1
-        text_clean = text_clean[start:end]
+# Garante a limpeza correta do bloco de resposta (Sem espaços à esquerda)
+if "```json" in text_clean:
+    text_clean = text_clean.split("```json")[1].split("```")[0]
+elif "```" in text_clean:
+    text_clean = text_clean.split("```")[1].split("```")[0]
+elif "{" in text_clean and "}" in text_clean:
+    start = text_clean.find("{")
+    end = text_clean.rfind("}") + 1
+    text_clean = text_clean[start:end]
+
+text_clean = text_clean.strip()
+return json.loads(text_clean)
+
         
     # Salvaguarda final: se o JSON estiver incompleto, injeta valores padrão para não quebrar a app
     try:
