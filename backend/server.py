@@ -460,7 +460,7 @@ async def scan_analyze(payload: ScanAnalyzeRequest):
     )
 
     try:
-        from google import genai
+        import google.generativeai as genai
         import base64
         import io
         from PIL import Image
