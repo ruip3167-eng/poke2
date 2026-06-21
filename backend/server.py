@@ -24,14 +24,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-### Inicializa a API da Google Gemini
+# Inicializa a API da Google Gemini
+GEMINI_KEY = os.environ.get("EMERGENT_LLM_KEY")
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    model = None
 
-GEMINI\_KEY = os.environ.get("EMERGENT\_LLM\_KEY")  
-if GEMINI\_KEY:  
-genai.configure(api\_key=GEMINI\_KEY)  
-model = genai.GenerativeModel('gemini-1.5-flash')  
-else:  
-model = None
 
 @app.get("/")  
 def read\_root():  
