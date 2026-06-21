@@ -16,12 +16,12 @@ app = FastAPI(title="PokeValue API")
 
 ### Configuração do CORS para o telemóvel se ligar sem bloqueios de segurança
 
-app.add\_middleware(  
-CORSMiddleware,  
-allow\_origins=\["*"\],  
-allow\_credentials=True,  
-allow\_methods=\["*"\],  
-allow\_headers=\["\*"\],  
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 ### Inicializa a API da Google Gemini
