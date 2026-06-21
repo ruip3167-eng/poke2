@@ -39,6 +39,7 @@ async def real_send_message_patch(self, message, *args, **kwargs):
         return await self.chat(message)
     
 
+
 # Se a biblioteca local for uma casca vazia, liga diretamente à API oficial
 import google.generativeai as genai
 import os
