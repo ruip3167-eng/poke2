@@ -1,18 +1,8 @@
 import sys
 import os
-
-app = FastAPI()
-
-# Permite que o telemóvel se ligue ao servidor sem bloqueios de segurança
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+
 """
 PokeValue Scanner backend
 - Gemini Vision for card recognition
@@ -37,6 +27,18 @@ import base64
 import httpx
 import cv2
 import numpy as np
+
+# 2. Agora sim, criamos o app DEPOIS de o importar (Mova para aqui)
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 
