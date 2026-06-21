@@ -10,7 +10,7 @@ import base64
 
 ### Garante o mapeamento correto de caminhos locais
 
-sys.path.append(os.path.dirname(os.path.abspath(**file**)))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 app = FastAPI(title="PokeValue API")
 
