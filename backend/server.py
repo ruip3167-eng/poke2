@@ -1,5 +1,17 @@
 import sys
 import os
+
+app = FastAPI()
+
+# Permite que o telemóvel se ligue ao servidor sem bloqueios de segurança
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 """
 PokeValue Scanner backend
