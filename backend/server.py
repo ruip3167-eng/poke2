@@ -2,7 +2,7 @@ import sys
 import os  
 from fastapi import FastAPI, HTTPException, UploadFile, File  
 from fastapi.middleware.cors import CORSMiddleware  
-import google.generativeai as genai  
+from google import genai
 import cv2  
 import numpy as np  
 import json  
@@ -24,13 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializa a API da Google Gemini
+# Inicializa o cliente oficial moderno da Google Gemini
 GEMINI_KEY = os.environ.get("EMERGENT_LLM_KEY")
 if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    client = genai.Client(api_key=GEMINI_KEY)
 else:
-    model = None
+    client = None
 
 
 @app.get("/")
@@ -56,7 +55,7 @@ async def scan_card(file: UploadFile = File(...)):
         prompt = "Analyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number', and 'confidence'. Do not explain anything."
         
         image_part = {"mime_type": "image/jpeg", "data": b64_data}
-        response = model.generate_content([prompt, image_part])
+        response = client.models.generate_content(model='gemini-1.5-flash', contents=[prompt, image_part])
         text_clean = response.text.strip()
         
         if "```json" in text_clean:
