@@ -44,17 +44,16 @@ async def scan_card(payload: ScanRequest):
     try:
         b64_data = payload.image_base64
         
-        # CORREÇÃO: Extrai apenas o texto real pós-vírgula se for um Data-URI e mantém como String pura
+        # Garante a extração limpa da string real pós-vírgula
         if "," in b64_data:
             b64_data = b64_data.split(",")[1]
             
         b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
         
-        # Converte a string base64 limpa de volta para bytes físicos
+        # Converte para bytes físicos para o SDK nativo
         import base64
         image_bytes = base64.b64decode(b64_data)
         
-        # FORMATO OFICIAL MÁXIMO DO SDK GOOGLE-GENAI PARA PRODUCÃO
         from google.genai import types
         image_part = types.Part.from_bytes(
             data=image_bytes,
@@ -68,13 +67,23 @@ async def scan_card(payload: ScanRequest):
             temperature=0.1
         )
         
+        # --- LOGS DE DIAGNÓSTICO ANTES DE ENVIAR ---
+        print(f"[DIAGNÓSTICO] Chave detetada: {'Sim' if client else 'Não'}")
+        print(f"[DIAGNÓSTICO] Tamanho dos bytes da imagem: {len(image_bytes)}")
+        
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[prompt, image_part],
             config=config
         )
         
-        text_clean = response.text.strip() if response.text else "{}"
+        text_clean = response.text.strip() if response.text else ""
+        
+        # --- LOG CRUCIAL: Mostra no Render o que a Google respondeu ---
+        print(f"[DIAGNÓSTICO] Resposta bruta do Gemini: '{text_clean}'")
+        
+        if not text_clean:
+            raise ValueError("A API do Gemini devolveu uma resposta completamente vazia.")
         
         if "```json" in text_clean:
             text_clean = text_clean.split("```json")[1].split("```")[0]
