@@ -40,23 +40,25 @@ else:
 def read_root():
     return {"status": "online", "message": "PokeValue API ready"}
 
+class ScanRequest(BaseModel):
+    image_base64: str
+    user_id: Optional[str] = None
+
 @app.post("/api/scan/analyze")
-async def scan_card(file: UploadFile = File(...)):
-    if not model:
-        raise HTTPException(status_code=500, detail="Gemini API Key não configurada")
+async def scan_card(payload: ScanRequest):
+    if not client:
+        raise HTTPException(status_code=500, detail="Gemini API Client não configurado")
         
     try:
-        contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        b64_data = payload.image_base64
         
-        if img is None:
-            raise HTTPException(status_code=400, detail="Imagem inválida")
+        # Limpa o cabeçalho data:image/jpeg;base64, caso o telemóvel o envie
+        if "," in b64_data:
+            b64_data = b64_data.split(",")[1]
             
-        _, buffer = cv2.imencode('.jpg', img)
-        b64_data = base64.b64encode(buffer).decode('utf-8')
+        b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
         
-        prompt = "Analyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number', and 'confidence'. Do not explain anything."
+        prompt = "Analyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number', and 'confidence'. Do not explain anything or write markdown formatting code."
         
         image_part = {"mime_type": "image/jpeg", "data": b64_data}
         response = client.models.generate_content(model='gemini-1.5-flash', contents=[prompt, image_part])
