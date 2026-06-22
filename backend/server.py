@@ -96,11 +96,14 @@ async def scan_card(payload: ScanRequest):
         card_name = ia_data.get("name", "")
         card_number = ia_data.get("number", "")
         
-        # CORREÇÃO DA SINTAXE: Divide a string, pega no primeiro elemento e limpa os espaços
+        # CORREÇÃO BLINDADA SEM SPLIT: Limpa espaços e zeros à esquerda de forma linear
         if card_number:
-            card_number = str(card_number).split("/")[0].strip()
-            card_number = card_number.lstrip("0")
-            if not card_number:  # Se era "000", garante pelo menos um zero
+            card_str = str(card_number).strip()
+            # Se o número vier com barra (ex: 063/078), limpa tudo o que está depois da barra
+            if "/" in card_str:
+                card_str = card_str.split("/")[0].strip()
+            card_number = card_str.lstrip("0")
+            if not card_number:
                 card_number = "0"
             
         matched_card = None
