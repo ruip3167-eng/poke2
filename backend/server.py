@@ -72,3 +72,35 @@ async def scan_card(file: UploadFile = File(...)):
 @app.on_event("shutdown")
 def shutdown_event():
     print("Servidor a encerrar...")
+
+
+# --- COLOQUE AS NOVAS ROTAS AQUI (LOGO ABAIXO DO SHUTDOWN) ---
+
+class CardSaveRequest(BaseModel):
+    user_id: str
+    card_data: Dict[str, Any]
+
+@app.get("/portfolio/{user_id}")
+async def get_portfolio(user_id: str):
+    return []
+
+@app.post("/portfolio/save")
+async def save_card(payload: CardSaveRequest):
+    return {"success": True, "message": "Carta guardada no simulador", "id": "mock_card_123"}
+
+@app.delete("/portfolio/{card_id}")
+async def delete_card(card_id: str):
+    return {"success": True, "deleted": 1}
+
+@app.get("/scan/count/{user_id}")
+async def get_scan_count(user_id: str):
+    return {"count": 0, "free_limit": 5, "is_pro": False}
+
+@app.post("/scan/count/{user_id}")
+async def increment_scan_count(user_id: str):
+    return {"count": 1, "free_limit": 5, "is_pro": False}
+
+@app.post("/scan/upgrade/{user_id}")
+async def upgrade_user(user_id: str):
+    return {"count": 0, "free_limit": 99999, "is_pro": True}
+
