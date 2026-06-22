@@ -4,10 +4,13 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel 
 from fastapi.middleware.cors import CORSMiddleware  
 from google import genai
+from typing import Dict, Any
 import cv2  
 import numpy as np  
 import json  
 import base64
+
+
 
 ### Garante o mapeamento correto de caminhos locais
 
