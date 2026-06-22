@@ -117,6 +117,7 @@ async def scan_card(payload: ScanRequest):
             if tcg_res.status_code == 200:
                 cards = tcg_res.json().get("data", [])
                 if cards:
+                    # CORREÇÃO CRUCIAL: Pega na primeira carta encontrada na lista [0]
                     matched_card = cards[0]
                     prices = matched_card.get("tcgplayer", {}).get("prices", {})
                     for p_type in ["holofoil", "normal", "reverseHolofoil"]:
