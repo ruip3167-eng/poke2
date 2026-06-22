@@ -36,7 +36,7 @@ else:
 def read_root():
     return {"status": "online", "message": "PokeValue API ready"}
 
-@app.post("/scan")
+@app.post("/scan/analyze")
 async def scan_card(file: UploadFile = File(...)):
     if not model:
         raise HTTPException(status_code=500, detail="Gemini API Key não configurada")
