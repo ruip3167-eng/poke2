@@ -60,8 +60,19 @@ async def scan_card(payload: ScanRequest):
         
         prompt = "Analyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number', and 'confidence'. Do not explain anything or write markdown formatting code."
         
-        image_part = {"mime_type": "image/jpeg", "data": b64_data}
-        response = client.models.generate_content(model='gemini-1.5-flash', contents=[prompt, image_part])
+        # FORMATO CORRIGIDO PARA O NOVO SDK GOOGLE-GENAI
+        image_part = {
+            "inline_data": {
+                "mime_type": "image/jpeg",
+                "data": b64_data
+            }
+        }
+        
+        # Chamada oficial do novo SDK cliente
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=[prompt, image_part]
+        )
         text_clean = response.text.strip()
         
         if "```json" in text_clean:
