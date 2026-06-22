@@ -33,44 +33,43 @@ else:
     model = None
 
 
-@app.get("/")  
-def read_root(): 
-return {"status": "online", "message": "PokeValue API ready"}
+@app.get("/")
+def read_root():
+    return {"status": "online", "message": "PokeValue API ready"}
 
-@app.post("/scan")  
-async def scan_card(file: UploadFile = File(...)):  
-if not model:  
-raise HTTPException(status\_code=500, detail="Gemini API Key não configurada")
+@app.post("/scan")
+async def scan_card(file: UploadFile = File(...)):
+    if not model:
+        raise HTTPException(status_code=500, detail="Gemini API Key não configurada")
+        
+    try:
+        contents = await file.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            raise HTTPException(status_code=400, detail="Imagem inválida")
+            
+        _, buffer = cv2.imencode('.jpg', img)
+        b64_data = base64.b64encode(buffer).decode('utf-8')
+        
+        prompt = "Analyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number', and 'confidence'. Do not explain anything."
+        
+        image_part = {"mime_type": "image/jpeg", "data": b64_data}
+        response = model.generate_content([prompt, image_part])
+        text_clean = response.text.strip()
+        
+        if "```json" in text_clean:
+            text_clean = text_clean.split("```json")[1].split("```")[0]
+        elif "```" in text_clean:
+            text_clean = text_clean.split("```")[1].split("```")[0]
+            
+        card_data = json.loads(text_clean.strip())
+        return {"success": True, "card": card_data}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
-try:  
-\# Lê os bytes da imagem enviada pelo telemóvel  
-contents = await file.read()  
-nparr = np.frombuffer(contents, np.uint8)  
-img = cv2.imdecode(nparr, cv2.IMREAD\_COLOR)
-
-if img is None:  
-raise HTTPException(status\_code=400, detail="Imagem inválida")
-
-\# Converte para base64 puro para enviar ao Gemini  
-\_, buffer = cv2.imencode('.jpg', img)  
-b64\_data = base64.b64encode(buffer).decode('utf-8')
-
-prompt = "Analyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set\_name', 'number', and 'confidence'. Do not explain anything or write markdown formatting code."
-
-image\_part = {"mime\_type": "image/jpeg", "data": b64\_data}  
-response = model.generate\_content(\[prompt, image\_part\])  
-text\_clean = response.text.strip()
-
-\# Limpeza de segurança caso a IA use blocos de código  
-if "`json" in text_clean: text_clean = text_clean.split("`json")\[1\].split("`")[0] elif "`" in text\_clean:  
-text\_clean = text\_clean.split("`")[1].split("`")\[0\]
-
-card\_data = json.loads(text\_clean.strip())  
-return {"success": True, "card": card\_data}
-
-except Exception as e:  
-raise HTTPException(status\_code=500, detail=f"Erro no processamento: {str(e)}")
-
-@app.on\_event("shutdown")  
-def shutdown\_event():  
-print("Servidor a encerrar...")
+@app.on_event("shutdown")
+def shutdown_event():
+    print("Servidor a encerrar...")
