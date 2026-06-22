@@ -1,6 +1,7 @@
 import sys  
 import os  
-from fastapi import FastAPI, HTTPException, UploadFile, File  
+from fastapi import FastAPI, HTTPException, UploadFile, File 
+from pydantic import BaseModel 
 from fastapi.middleware.cors import CORSMiddleware  
 from google import genai
 import cv2  
