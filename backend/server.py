@@ -78,11 +78,17 @@ def shutdown_event():
     print("Servidor a encerrar...")
 
 
-# --- COLOQUE AS NOVAS ROTAS AQUI (LOGO ABAIXO DO SHUTDOWN) ---
+# --- ROTAS DE PORTFÓLIO E CONTROLO DE SCANS (MOCKS TEMPORÁRIOS) ---
 
 class CardSaveRequest(BaseModel):
     user_id: str
     card_data: Dict[str, Any]
+
+# ROTA DE SALVAGUARDA: Se o telemóvel chamar /portfolio ou /portfolio/ vazio, não dá 404
+@app.get("/portfolio")
+@app.get("/portfolio/")
+async def get_portfolio_empty():
+    return []
 
 @app.get("/portfolio/{user_id}")
 async def get_portfolio(user_id: str):
@@ -96,15 +102,4 @@ async def save_card(payload: CardSaveRequest):
 async def delete_card(card_id: str):
     return {"success": True, "deleted": 1}
 
-@app.get("/scan/count/{user_id}")
-async def get_scan_count(user_id: str):
-    return {"count": 0, "free_limit": 5, "is_pro": False}
-
-@app.post("/scan/count/{user_id}")
-async def increment_scan_count(user_id: str):
-    return {"count": 1, "free_limit": 5, "is_pro": False}
-
-@app.post("/scan/upgrade/{user_id}")
-async def upgrade_user(user_id: str):
-    return {"count": 0, "free_limit": 99999, "is_pro": True}
 
