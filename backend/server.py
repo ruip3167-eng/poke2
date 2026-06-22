@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel 
 from fastapi.middleware.cors import CORSMiddleware  
 from google import genai
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import cv2  
 import numpy as np  
 import json  
