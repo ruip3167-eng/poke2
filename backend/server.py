@@ -44,17 +44,25 @@ async def scan_card(payload: ScanRequest):
     try:
         b64_data = payload.image_base64
         
-        # CORREÇÃO DEFINITIVA: Extrai apenas a string real pós-vírgula se for um Data-URI
+        # Extrai apenas a string limpa pós-vírgula
         if "," in b64_data:
             b64_data = b64_data.split(",")[1]
             
         b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
         
-        prompt = "Analyze this Pokemon card photo. Return a JSON object with keys: 'name', 'set_name', 'number'."
-        image_part = {"inline_data": {"mime_type": "image/jpeg", "data": b64_data}}
+        # Converte a string base64 limpa de volta para bytes físicos
+        import base64
+        image_bytes = base64.b64decode(b64_data)
         
-        # Ativa o modo de configuraçao estruturada nativa para forçar JSON puro
+        # FORMATO OFICIAL MÁXIMO DO SDK GOOGLE-GENAI PARA PRODUCÃO
         from google.genai import types
+        image_part = types.Part.from_bytes(
+            data=image_bytes,
+            mime_type="image/jpeg"
+        )
+        
+        prompt = "Analyze this Pokemon card photo. Return a JSON object with keys: 'name', 'set_name', 'number'."
+        
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.1
@@ -66,9 +74,8 @@ async def scan_card(payload: ScanRequest):
             config=config
         )
         
-        text_clean = response.text.strip()
+        text_clean = response.text.strip() if response.text else "{}"
         
-        # Limpeza cirúrgica avançada de blocos Markdown residuais
         if "```json" in text_clean:
             text_clean = text_clean.split("```json")[1].split("```")[0]
         elif "```" in text_clean:
@@ -76,7 +83,6 @@ async def scan_card(payload: ScanRequest):
             
         text_clean = text_clean.strip()
         
-        # Extração de salvaguarda caso venha texto antes/depois do JSON
         if not text_clean.startswith("{"):
             start_idx = text_clean.find("{")
             end_idx = text_clean.rfind("}") + 1
