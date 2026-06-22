@@ -77,13 +77,13 @@ async def scan_card(payload: ScanRequest):
             config=config
         )
         
-         text_clean = response.text.strip() if response.text else ""
+        text_clean = response.text.strip() if response.text else ""
         print(f"[DIAGNÓSTICO] Resposta bruta do Gemini: '{text_clean}'")
         
         if not text_clean:
             raise ValueError("A API do Gemini devolveu uma resposta completamente vazia.")
         
-        # CORREÇÃO DA LIMPEZA: Corta os blocos Markdown salvaguardando os índices da lista
+        # Garante o corte correto sem quebras de sintaxe (8 espaços de avanço)
         if "```json" in text_clean:
             text_clean = text_clean.split("```json")[1].split("```")[0]
         elif "```" in text_clean:
