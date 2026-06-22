@@ -82,15 +82,8 @@ async def scan_card(payload: ScanRequest):
         
         if not text_clean:
             raise ValueError("A API do Gemini devolveu uma resposta completamente vazia.")
-        
-        # Garante o corte correto sem quebras de sintaxe (8 espaços de avanço)
-        if "```json" in text_clean:
-            text_clean = text_clean.split("```json")[1].split("```")[0]
-        elif "```" in text_clean:
-            text_clean = text_clean.split("```")[1].split("```")[0]
             
-        text_clean = text_clean.strip()
-        
+        # EXTRAÇÃO CIRÚRGICA DIRETA (Sem os splits problemáticos)
         if not text_clean.startswith("{"):
             start_idx = text_clean.find("{")
             end_idx = text_clean.rfind("}") + 1
