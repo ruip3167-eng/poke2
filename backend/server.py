@@ -44,7 +44,7 @@ async def scan_card(payload: ScanRequest):
     try:
         b64_data = payload.image_base64
         
-        # CORREÇÃO: Pega apenas no texto pós-vírgula se for um Data-URI e mantém como String
+        # CORREÇÃO DEFINITIVA: Extrai apenas a string real pós-vírgula se for um Data-URI
         if "," in b64_data:
             b64_data = b64_data.split(",")[1]
             
