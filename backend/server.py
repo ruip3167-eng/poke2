@@ -48,35 +48,61 @@ async def scan_card(payload: ScanRequest):
             
         b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
         
-        prompt = "Analyze this Pokemon card photo. Return ONLY a raw JSON object with keys: 'name', 'set_name', 'number'. Do not include markdown formatting or extra text."
+        prompt = "Analyze this Pokemon card photo. Return a JSON object with keys: 'name', 'set_name', 'number'."
         image_part = {"inline_data": {"mime_type": "image/jpeg", "data": b64_data}}
+        
+        # Ativa o modo de configuraçao estruturada nativa para forçar JSON puro
+        from google.genai import types
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.1
+        )
         
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=[prompt, image_part]
+            contents=[prompt, image_part],
+            config=config
         )
         
-        text = response.text.strip()
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
+        text_clean = response.text.strip()
+        
+        # Limpeza cirúrgica avançada de blocos Markdown residuais
+        if "```json" in text_clean:
+            text_clean = text_clean.split("```json")[1].split("```")[0]
+        elif "```" in text_clean:
+            text_clean = text_clean.split("```")[1].split("```")[0]
             
-        ia_data = json.loads(text.strip())
+        text_clean = text_clean.strip()
+        
+        # Extração de salvaguarda caso venha texto antes/depois do JSON
+        if not text_clean.startswith("{"):
+            start_idx = text_clean.find("{")
+            end_idx = text_clean.rfind("}") + 1
+            if start_idx != -1 and end_idx != -1:
+                text_clean = text_clean[start_idx:end_idx]
+                
+        ia_data = json.loads(text_clean)
         
         # --- CRUZAMENTO LIVE COM O POKEMONTCG.IO ---
         card_name = ia_data.get("name", "")
         card_number = ia_data.get("number", "")
         
-        # Faz a pesquisa na API pública de Pokémons
+        # Se o número for lido como inteiro, converte para string
+        if card_number is not None:
+            card_number = str(card_number)
+            
+        matched_card = None
+        market_price = None
+        
         async with httpx.AsyncClient() as http_client:
             query = f'name:"{card_name}"'
             if card_number:
                 query += f' number:"{card_number}"'
                 
             tcg_res = await http_client.get(
-                f"https://pokemontcg.io",
-                params={"q": query, "pageSize": 1}
+                "https://pokemontcg.io",
+                params={"q": query, "pageSize": 1},
+                timeout=10.0
             )
             
             if tcg_res.status_code == 200:
@@ -84,29 +110,26 @@ async def scan_card(payload: ScanRequest):
                 if cards:
                     matched_card = cards[0]
                     prices = matched_card.get("tcgplayer", {}).get("prices", {})
-                    market_price = None
-                    
-                    # Puxa o primeiro preço disponível no mercado
                     for p_type in ["holofoil", "normal", "reverseHolofoil"]:
                         if p_type in prices:
                             market_price = prices[p_type].get("market")
                             break
-                            
-                    # Monta o objeto completo enriquecido que a App exige para renderizar
-                    return {
-                        "success": True,
-                        "card": {
-                            "id": matched_card.get("id"),
-                            "name": matched_card.get("name"),
-                            "set_name": matched_card.get("set", {}).get("name"),
-                            "number": matched_card.get("number"),
-                            "image_url": matched_card.get("images", {}).get("large"),
-                            "tcgplayer_market": market_price,
-                            "confidence": "high"
-                        }
-                    }
 
-        # Fallback caso não encontre na API oficial
+        if matched_card:
+            return {
+                "success": True,
+                "card": {
+                    "id": matched_card.get("id"),
+                    "name": matched_card.get("name"),
+                    "set_name": matched_card.get("set", {}).get("name"),
+                    "number": matched_card.get("number"),
+                    "image_url": matched_card.get("images", {}).get("large"),
+                    "tcgplayer_market": market_price,
+                    "confidence": "high"
+                }
+            }
+
+        # Fallback estruturado caso não localize na API do TCG jogador
         return {
             "success": True,
             "card": {
@@ -114,13 +137,13 @@ async def scan_card(payload: ScanRequest):
                 "set_name": ia_data.get("set_name"),
                 "number": card_number,
                 "image_url": "https://pokemontcg.io",
-                "tcgplayer_market": 5.0,
+                "tcgplayer_market": 4.99,
                 "confidence": "medium"
             }
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
 # --- ROTAS DE PORTFÓLIO E MOCKS COMPLETOS ---
 @app.get("/api/portfolio")
