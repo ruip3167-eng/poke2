@@ -70,7 +70,7 @@ async def scan_card(payload: ScanRequest):
         
         # Chamada oficial do novo SDK cliente
         response = client.models.generate_content(
-            model='gemini-1.5-flash-latest',
+            model='gemini-2.5-flash',
             contents=[prompt, image_part]
         )
         text_clean = response.text.strip()
