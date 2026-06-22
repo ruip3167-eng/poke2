@@ -108,9 +108,16 @@ async def scan_card(payload: ScanRequest):
                 if card_number:
                     query += f' number:"{card_number}"'
                     
+                # Adiciona cabeçalhos oficiais para evitar bloqueios da API externa
+                headers = {
+                    "User-Agent": "PokeValueApp/1.0 (Contact: rui@PokeValue.com)",
+                    "Accept": "application/json"
+                }
+                
                 tcg_res = await http_client.get(
                     "https://pokemontcg.io",
                     params={"q": query, "pageSize": 1},
+                    headers=headers,
                     timeout=8.0
                 )
                 
