@@ -96,34 +96,36 @@ async def scan_card(payload: ScanRequest):
         card_name = ia_data.get("name", "")
         card_number = ia_data.get("number", "")
         
-        # Se o número for lido como inteiro, converte para string
         if card_number is not None:
             card_number = str(card_number)
             
         matched_card = None
         market_price = None
         
-        async with httpx.AsyncClient() as http_client:
-            query = f'name:"{card_name}"'
-            if card_number:
-                query += f' number:"{card_number}"'
+        try:
+            async with httpx.AsyncClient() as http_client:
+                query = f'name:"{card_name}"'
+                if card_number:
+                    query += f' number:"{card_number}"'
+                    
+                tcg_res = await http_client.get(
+                    "https://pokemontcg.io",
+                    params={"q": query, "pageSize": 1},
+                    timeout=8.0
+                )
                 
-            tcg_res = await http_client.get(
-                "https://pokemontcg.io",
-                params={"q": query, "pageSize": 1},
-                timeout=10.0
-            )
-            
-            if tcg_res.status_code == 200:
-                cards = tcg_res.json().get("data", [])
-                if cards:
-                    # CORREÇÃO CRUCIAL: Pega na primeira carta encontrada na lista [0]
-                    matched_card = cards[0]
-                    prices = matched_card.get("tcgplayer", {}).get("prices", {})
-                    for p_type in ["holofoil", "normal", "reverseHolofoil"]:
-                        if p_type in prices:
-                            market_price = prices[p_type].get("market")
-                            break
+                if tcg_res.status_code == 200:
+                    cards_list = tcg_res.json().get("data", [])
+                    # CORREÇÃO COM COLCHETES [0] PARA EXTRAIR A PRIMEIRA CARTA DA LISTA
+                    if isinstance(cards_list, list) and len(cards_list) > 0:
+                        matched_card = cards_list[0]
+                        prices = matched_card.get("tcgplayer", {}).get("prices", {})
+                        for p_type in ["holofoil", "normal", "reverseHolofoil"]:
+                            if p_type in prices:
+                                market_price = prices[p_type].get("market")
+                                break
+        except Exception as tcg_err:
+            print(f"[DIAGNÓSTICO] Erro silencioso na API pokemontcg.io: {str(tcg_err)}")
 
         if matched_card:
             return {
@@ -139,7 +141,7 @@ async def scan_card(payload: ScanRequest):
                 }
             }
 
-        # Fallback estruturado caso não localize na API do TCG jogador
+        # Fallback estruturado caso a API externa não encontre ou falhe
         return {
             "success": True,
             "card": {
