@@ -40,7 +40,7 @@ else:
 def read_root():
     return {"status": "online", "message": "PokeValue API ready"}
 
-@app.post("/scan/analyze")
+@app.post("/api/scan/analyze")
 async def scan_card(file: UploadFile = File(...)):
     if not model:
         raise HTTPException(status_code=500, detail="Gemini API Key não configurada")
@@ -84,22 +84,35 @@ class CardSaveRequest(BaseModel):
     user_id: str
     card_data: Dict[str, Any]
 
-# ROTA DE SALVAGUARDA: Se o telemóvel chamar /portfolio ou /portfolio/ vazio, não dá 404
-@app.get("/portfolio")
-@app.get("/portfolio/")
+# --- ROTAS DE PORTFÓLIO E CONTROLO DE SCANS ---
+@app.get("/api/portfolio")
+@app.get("/api/portfolio/")
 async def get_portfolio_empty():
     return []
 
-@app.get("/portfolio/{user_id}")
+@app.get("/api/portfolio/{user_id}")
 async def get_portfolio(user_id: str):
     return []
 
-@app.post("/portfolio/save")
+@app.post("/api/portfolio/save")
 async def save_card(payload: CardSaveRequest):
     return {"success": True, "message": "Carta guardada no simulador", "id": "mock_card_123"}
 
-@app.delete("/portfolio/{card_id}")
+@app.delete("/api/portfolio/{card_id}")
 async def delete_card(card_id: str):
     return {"success": True, "deleted": 1}
+
+@app.get("/api/scan/count/{user_id}")
+async def get_scan_count(user_id: str):
+    return {"count": 0, "free_limit": 5, "is_pro": False}
+
+@app.post("/api/scan/count/{user_id}")
+async def increment_scan_count(user_id: str):
+    return {"count": 1, "free_limit": 5, "is_pro": False}
+
+@app.post("/api/scan/upgrade/{user_id}")
+async def upgrade_user(user_id: str):
+    return {"count": 0, "free_limit": 99999, "is_pro": True}
+
 
 
