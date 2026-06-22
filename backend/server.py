@@ -96,7 +96,7 @@ async def scan_card(payload: ScanRequest):
         card_name = ia_data.get("name", "")
         card_number = ia_data.get("number", "")
         
-        # Limpeza inteligente do número (Ex: "063/078" -> "63")
+        # CORREÇÃO DA SINTAXE: Divide a string, pega no primeiro elemento e limpa os espaços
         if card_number:
             card_number = str(card_number).split("/")[0].strip()
             card_number = card_number.lstrip("0")
