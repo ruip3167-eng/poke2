@@ -105,7 +105,7 @@ async def scan_card(payload: ScanRequest):
         if card_number:
             card_str = str(card_number).strip()
             if "/" in card_str:
-                card_str = card_str.split("/")[0].strip()  # Corrigido: extrai o índice antes do strip
+                card_str = card_str.split("/")[0].strip()
             card_number = card_str.lstrip("0")
             if not card_number:
                 card_number = "0"
@@ -113,10 +113,10 @@ async def scan_card(payload: ScanRequest):
         matched_card = None
         market_price = None
         
-        # === NOVA ESTRATÉGIA ANTI-BLOQUEIO (URLLIB NATIVA) ===
         try:
             import urllib.request
             import urllib.parse
+            import gzip  # Adicionado para descomprimir a resposta da API
             
             query = f'name:"{card_name}" number:"{card_number}"'
             url_params = urllib.parse.urlencode({"q": query, "pageSize": 1})
@@ -126,7 +126,8 @@ async def scan_card(payload: ScanRequest):
                 full_url, 
                 headers={
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Accept-Encoding': 'gzip, deflate'
                 }
             )
             
@@ -135,16 +136,23 @@ async def scan_card(payload: ScanRequest):
                 print(f"[DIAGNÓSTICO] Resposta Urllib API Status: {status_code}")
                 
                 if status_code == 200:
-                    raw_data = response_web.read().decode('utf-8')
+                    response_data = response_web.read()
+                    
+                    # Descomprime os bytes se a API os enviou em formato Gzip
+                    if response_web.info().get('Content-Encoding') == 'gzip':
+                        response_data = gzip.decompress(response_data)
+                        
+                    raw_data = response_data.decode('utf-8')
                     res_json = json.loads(raw_data)
                     cards_list = res_json.get("data", [])
+                    
                     if isinstance(cards_list, list) and len(cards_list) > 0:
-                        matched_card = cards_list[0] # Extrai a carta com sucesso
+                        # 👑 CORREÇÃO FINAL: Extrai o primeiro item da lista usando o índice [0]
+                        matched_card = cards_list[0]
                         
         except Exception as tcg_err:
             print(f"[DIAGNÓSTICO] Erro na consulta Urllib: {str(tcg_err)}")
 
-        # Se encontrarmos dados válidos na API, preenchemos o ecrã do telemóvel
         if matched_card:
             prices = matched_card.get("tcgplayer", {}).get("prices", {})
             for p_type in ["holofoil", "normal", "reverseHolofoil"]:
@@ -165,7 +173,6 @@ async def scan_card(payload: ScanRequest):
                 }
             }
 
-        # Fallback estruturado seguro caso a carta não exista na base de dados global deles
         return {
             "success": True,
             "card": {
