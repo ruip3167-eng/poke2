@@ -99,6 +99,7 @@ async def scan_card(payload: ScanRequest):
         card_name = ia_data.get("name", "")
         card_number = ia_data.get("number", "")
         
+        # === AQUI ESTÁ A CORREÇÃO BLINDADA DO SLICE [0] ===
         if card_number:
             card_str = str(card_number).strip()
             if "/" in card_str:
