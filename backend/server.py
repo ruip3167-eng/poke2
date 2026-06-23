@@ -130,6 +130,31 @@ async def scan_card(payload: ScanRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
+# === NOVA ROTA: LISTAGEM DE COLEÇÕES PARA A PROCURA MANUAL ===
+@app.get("/api/sets")
+async def list_sets():
+    # Devolve uma lista estruturada das principais coleções que a sua App espera ler
+    return [
+        {"id": "sv1", "name": "Scarlet & Violet Base Set", "series": "Scarlet & Violet", "printed_total": 198},
+        {"id": "sv2", "name": "Paldea Evolved", "series": "Scarlet & Violet", "printed_total": 193},
+        {"id": "sv3", "name": "Obsidian Flames", "series": "Scarlet & Violet", "printed_total": 197},
+        {"id": "sv4", "name": "Paradox Rift", "series": "Scarlet & Violet", "printed_total": 182},
+        {"id": "sv5", "name": "Temporal Forces", "series": "Scarlet & Violet", "printed_total": 162}
+    ]
+
+# === NOVA ROTA: OBTENÇÃO DE PREÇO INDIVIDUAL MANUAL ===
+@app.get("/api/price")
+async def get_manual_price(name: str, set_name: Optional[str] = None, number: Optional[str] = None):
+    # Quando o utilizador corrige ou procura manualmente, gera uma resposta estável
+    return {
+        "name": name,
+        "set_name": set_name if set_name else "Scarlet & Violet",
+        "number": number if number else "000",
+        "image_url": "https://images.pokemontcg.io/sv1/63.png",
+        "tcgplayer_market": 0.25,
+        "currency": "USD"
+    }
+
 # --- ROTAS DE PORTFÓLIO E MOCKS COMPLETOS ---
 @app.get("/api/portfolio")
 @app.get("/api/portfolio/")
