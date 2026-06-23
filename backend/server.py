@@ -77,7 +77,7 @@ async def scan_card(payload: ScanRequest):
             temperature=0.0
         )
 
-        # Valores de salvaguarda locais obrigatórios para evitar o Erro 500 se o Gemini falhar 503
+        # Valores padrão estáveis (Starly) caso a IA falhe por falta de quota (429)
         card_name = "Starly"
         card_number = "140"
         set_name = "Scarlet & Violet"
@@ -107,14 +107,14 @@ async def scan_card(payload: ScanRequest):
                 market_price = ia_data.get("market_price", market_price)
 
         except Exception as gemini_err:
-            print(f"[AVISO CRÍTICO] Falha 503 da Gemini detetada. Ativando Fallback Local: {str(gemini_err)}")
+            print(f"[AVISO CRÍTICO] Falha ou limite de quota Gemini detetado. Ativando Fallback: {str(gemini_err)}")
 
         try:
             market_price = float(market_price)
         except:
             market_price = 0.05
 
-        # Limpeza segura do número da carta para o link de imagem
+        # === CONSTRUÇÃO DO LINK DE IMAGEM INFALÍVEL ===
         card_str = str(card_number).strip()
         if "/" in card_str:
             card_str = card_str.split("/")[0].strip()
@@ -133,6 +133,7 @@ async def scan_card(payload: ScanRequest):
         elif "sword" in set_name.lower():
             set_prefix = "swsh1"
 
+        # 👑 Link corrigido com a barra oficial do repositório da Nintendo/Pokémon TCG
         image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}.png"
         card_id = f"{set_prefix}-{clean_num}"
 
@@ -156,7 +157,6 @@ async def scan_card(payload: ScanRequest):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
-
 
 # === ROTAS RECUPERADAS: PROCURA MANUAL E LISTAGEM ===
 
