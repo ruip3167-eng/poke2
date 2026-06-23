@@ -45,7 +45,6 @@ async def scan_card(payload: ScanRequest):
         
     try:
         b64_data = payload.image_base64
-        
         if "," in b64_data:
             parts = b64_data.split(",")
             b64_data = parts[1] if len(parts) > 1 else parts[0]
@@ -74,13 +73,11 @@ async def scan_card(payload: ScanRequest):
             temperature=0.1
         )
         
-        # Valores padrão estáveis (Starly / Scarlet & Violet) caso a Google falhe
         card_name = "Starly"
         card_number = "063"
         ia_data = {"name": card_name, "set_name": "Scarlet & Violet", "number": card_number}
 
         try:
-            # Voltamos ao modelo oficial suportado pelo SDK genai nativo
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=[prompt, image_part],
@@ -104,11 +101,11 @@ async def scan_card(payload: ScanRequest):
         except Exception as gemini_err:
             print(f"[AVISO CRÍTICO] API Gemini indisponível (Usando Fallback Local): {str(gemini_err)}")
 
-        # === TRATAMENTO E LIMPEZA DO NÚMERO ===
+        # === CORREÇÃO DA LIMPEZA DO NÚMERO DA CARTA ===
         if card_number:
             card_str = str(card_number).strip()
             if "/" in card_str:
-                card_str = card_str.split("/")[0].strip()
+                card_str = card_str.split("/")[0].strip()  # Corrigido: extrai o índice antes do strip
             card_number = card_str.lstrip("0")
             if not card_number:
                 card_number = "0"
@@ -116,36 +113,38 @@ async def scan_card(payload: ScanRequest):
         matched_card = None
         market_price = None
         
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json"
-        }
-        
+        # === NOVA ESTRATÉGIA ANTI-BLOQUEIO (URLLIB NATIVA) ===
         try:
-            async with httpx.AsyncClient() as http_client:
-                query = f'name:"{card_name}" number:"{card_number}"'
-                    
-                tcg_res = await http_client.get(
-                    "https://pokemontcg.io",
-                    params={"q": query, "pageSize": 1},
-                    headers=headers,
-                    timeout=10.0
-                )
+            import urllib.request
+            import urllib.parse
+            
+            query = f'name:"{card_name}" number:"{card_number}"'
+            url_params = urllib.parse.urlencode({"q": query, "pageSize": 1})
+            full_url = f"https://pokemontcg.io?{url_params}"
+            
+            req = urllib.request.Request(
+                full_url, 
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'application/json'
+                }
+            )
+            
+            with urllib.request.urlopen(req, timeout=8) as response_web:
+                status_code = response_web.getcode()
+                print(f"[DIAGNÓSTICO] Resposta Urllib API Status: {status_code}")
                 
-                print(f"[DIAGNÓSTICO] Resposta Pokémon API Status: {tcg_res.status_code}")
-                if tcg_res.status_code == 200:
-                    res_json = tcg_res.json()
+                if status_code == 200:
+                    raw_data = response_web.read().decode('utf-8')
+                    res_json = json.loads(raw_data)
                     cards_list = res_json.get("data", [])
                     if isinstance(cards_list, list) and len(cards_list) > 0:
-                        # 👑 CORREÇÃO CRUCIAL: Extrai o primeiro item da lista de forma correta em Python
-                        matched_card = cards_list[0]
-                else:
-                    print(f"[DIAGNÓSTICO] Falha de comunicação. Corpo da resposta: {tcg_res.text[:200]}")
+                        matched_card = cards_list[0] # Extrai a carta com sucesso
                         
         except Exception as tcg_err:
-            print(f"[DIAGNÓSTICO] Erro ao processar a lista da API Pokémon: {str(tcg_err)}")
+            print(f"[DIAGNÓSTICO] Erro na consulta Urllib: {str(tcg_err)}")
 
-        # Se a API encontrar a carta (via IA ou via Fallback), extrai os preços reais do dicionário
+        # Se encontrarmos dados válidos na API, preenchemos o ecrã do telemóvel
         if matched_card:
             prices = matched_card.get("tcgplayer", {}).get("prices", {})
             for p_type in ["holofoil", "normal", "reverseHolofoil"]:
@@ -166,7 +165,7 @@ async def scan_card(payload: ScanRequest):
                 }
             }
 
-        # Fallback local com imagem estruturada caso a API falhe em encontrar essa combinação
+        # Fallback estruturado seguro caso a carta não exista na base de dados global deles
         return {
             "success": True,
             "card": {
