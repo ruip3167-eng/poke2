@@ -40,20 +40,28 @@ def read_root():
 from fastapi import UploadFile, File
 
 @app.post("/api/scan/analyze")
-async def scan_card(file: UploadFile = File(...)):
+async def scan_card(payload: ScanRequest):
     if not client:
         raise HTTPException(status_code=500, detail="Gemini API Client não configurado")
         
     try:
-        # Lê os bytes diretamente do ficheiro enviado pelo telemóvel
-        image_bytes = await file.read()
+        b64_data = payload.image_base64
+        
+        if "," in b64_data:
+            b64_data = b64_data.split(",")[1]
+            
+        b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
+        
+        # Converte a string de texto recebida de volta para bytes físicos
+        import base64
+        image_bytes = base64.b64decode(b64_data)
         
         # --- LOGS DE DIAGNÓSTICO ---
         print(f"[DIAGNÓSTICO] Chave detetada: {'Sim' if client else 'Não'}")
-        print(f"[DIAGNÓSTICO] Tamanho dos bytes da imagem recebida: {len(image_bytes)}")
+        print(f"[DIAGNÓSTICO] Tamanho dos bytes da imagem descodificada: {len(image_bytes)}")
         
         if len(image_bytes) == 0:
-            raise ValueError("O ficheiro de imagem recebido está vazio.")
+            raise ValueError("Os bytes da imagem descodificada estão vazios.")
 
         from google.genai import types
         image_part = types.Part.from_bytes(
@@ -112,7 +120,6 @@ async def scan_card(file: UploadFile = File(...)):
                 if card_number:
                     query += f' number:"{card_number}"'
                     
-                # CORREÇÃO: URL corrigida para a API v2 oficial de cartas
                 tcg_res = await http_client.get(
                     "https://pokemontcg.io",
                     params={"q": query, "pageSize": 1},
@@ -157,7 +164,7 @@ async def scan_card(file: UploadFile = File(...)):
                 "name": card_name,
                 "set_name": ia_data.get("set_name", "Unknown Set"),
                 "number": card_number,
-                "image_url": "https://pokemontcg.io", # Link de imagem real para não quebrar a UI
+                "image_url": "https://pokemontcg.io",
                 "tcgplayer_market": 1.50,
                 "confidence": "medium"
             }
@@ -165,7 +172,7 @@ async def scan_card(file: UploadFile = File(...)):
         
     except Exception as e:
         import traceback
-        traceback.print_exc() # Isto vai mostrar o erro exato no terminal do Render se algo falhar
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
 # --- ROTAS DE PORTFÓLIO E MOCKS COMPLETOS ---
