@@ -71,7 +71,7 @@ async def scan_card(payload: ScanRequest):
             mime_type="image/jpeg"
         )
         
-        prompt = "Analyze this Pokemon card photo. Return a JSON object with keys: 'name', 'set_name', 'number'."
+prompt = "Analyze this Pokemon card photo. IMPORTANT: Even if the card text is in Korean, Japanese, or another language, you MUST return the official English name of this Pokemon card. Return a JSON object with keys: 'name', 'set_name', 'number'."
         
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -129,8 +129,9 @@ async def scan_card(payload: ScanRequest):
             "Accept": "application/json"
         }
         
-        try:
+         try:
             async with httpx.AsyncClient() as http_client:
+                # Pesquisa pelo Nome em Inglês e Número Limpo
                 query = f'name:"{card_name}"'
                 if card_number:
                     query += f' number:"{card_number}"'
@@ -145,6 +146,7 @@ async def scan_card(payload: ScanRequest):
                 if tcg_res.status_code == 200:
                     cards_list = tcg_res.json().get("data", [])
                     if isinstance(cards_list, list) and len(cards_list) > 0:
+                        # CORREÇÃO: Pega no primeiro resultado real encontrado na API
                         matched_card = cards_list[0]
                 else:
                     print(f"[DIAGNÓSTICO] API Pokémon respondeu com status: {tcg_res.status_code}")
