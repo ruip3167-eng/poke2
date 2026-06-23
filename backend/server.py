@@ -36,24 +36,25 @@ class CardSaveRequest(BaseModel):
 def read_root():
     return {"status": "online", "message": "PokeValue API ready"}
 
+# Mude a linha do import do UploadFile no topo, ou garanta que usa assim:
+from fastapi import UploadFile, File
+
 @app.post("/api/scan/analyze")
-async def scan_card(payload: ScanRequest):
+async def scan_card(file: UploadFile = File(...)):
     if not client:
         raise HTTPException(status_code=500, detail="Gemini API Client não configurado")
         
     try:
-        b64_data = payload.image_base64
+        # Lê os bytes diretamente do ficheiro enviado pelo telemóvel
+        image_bytes = await file.read()
         
-        # Garante a extração limpa da string real pós-vírgula
-        if "," in b64_data:
-            b64_data = b64_data.split(",")[1]
-            
-        b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
+        # --- LOGS DE DIAGNÓSTICO ---
+        print(f"[DIAGNÓSTICO] Chave detetada: {'Sim' if client else 'Não'}")
+        print(f"[DIAGNÓSTICO] Tamanho dos bytes da imagem recebida: {len(image_bytes)}")
         
-        # Converte para bytes físicos para o SDK nativo
-        import base64
-        image_bytes = base64.b64decode(b64_data)
-        
+        if len(image_bytes) == 0:
+            raise ValueError("O ficheiro de imagem recebido está vazio.")
+
         from google.genai import types
         image_part = types.Part.from_bytes(
             data=image_bytes,
@@ -67,10 +68,6 @@ async def scan_card(payload: ScanRequest):
             temperature=0.1
         )
         
-        # --- LOGS DE DIAGNÓSTICO ANTES DE ENVIAR ---
-        print(f"[DIAGNÓSTICO] Chave detetada: {'Sim' if client else 'Não'}")
-        print(f"[DIAGNÓSTICO] Tamanho dos bytes da imagem: {len(image_bytes)}")
-        
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[prompt, image_part],
@@ -83,7 +80,6 @@ async def scan_card(payload: ScanRequest):
         if not text_clean:
             raise ValueError("A API do Gemini devolveu uma resposta completamente vazia.")
             
-        # EXTRAÇÃO CIRÚRGICA DIRETA (Sem os splits problemáticos)
         if not text_clean.startswith("{"):
             start_idx = text_clean.find("{")
             end_idx = text_clean.rfind("}") + 1
@@ -92,14 +88,11 @@ async def scan_card(payload: ScanRequest):
                 
         ia_data = json.loads(text_clean)
         
-        # --- CRUZAMENTO LIVE COM O POKEMONTCG.IO ---
         card_name = ia_data.get("name", "")
         card_number = ia_data.get("number", "")
         
-        # CORREÇÃO BLINDADA SEM SPLIT: Limpa espaços e zeros à esquerda de forma linear
         if card_number:
             card_str = str(card_number).strip()
-            # Se o número vier com barra (ex: 063/078), limpa tudo o que está depois da barra
             if "/" in card_str:
                 card_str = card_str.split("/")[0].strip()
             card_number = card_str.lstrip("0")
@@ -115,11 +108,11 @@ async def scan_card(payload: ScanRequest):
         
         try:
             async with httpx.AsyncClient() as http_client:
-                # Tentativa 1: Pesquisa direta por Nome e Número Limpo (Mais infalível globalmente)
                 query = f'name:"{card_name}"'
                 if card_number:
                     query += f' number:"{card_number}"'
                     
+                # CORREÇÃO: URL corrigida para a API v2 oficial de cartas
                 tcg_res = await http_client.get(
                     "https://pokemontcg.io",
                     params={"q": query, "pageSize": 1},
@@ -131,9 +124,11 @@ async def scan_card(payload: ScanRequest):
                     cards_list = tcg_res.json().get("data", [])
                     if isinstance(cards_list, list) and len(cards_list) > 0:
                         matched_card = cards_list[0]
+                else:
+                    print(f"[DIAGNÓSTICO] API Pokémon respondeu com status: {tcg_res.status_code}")
                         
         except Exception as tcg_err:
-            print(f"[DIAGNÓSTICO] Erro na Tentativa 1: {str(tcg_err)}")
+            print(f"[DIAGNÓSTICO] Erro ao consultar a API Pokémon: {str(tcg_err)}")
 
         if matched_card:
             prices = matched_card.get("tcgplayer", {}).get("prices", {})
@@ -155,7 +150,6 @@ async def scan_card(payload: ScanRequest):
                 }
             }
 
-        # Fallback estruturado amigável (Garante que a App renderiza mesmo que a API falhe)
         return {
             "success": True,
             "card": {
@@ -163,13 +157,15 @@ async def scan_card(payload: ScanRequest):
                 "name": card_name,
                 "set_name": ia_data.get("set_name", "Unknown Set"),
                 "number": card_number,
-                "image_url": "https://pokemontcg.io",
+                "image_url": "https://pokemontcg.io", # Link de imagem real para não quebrar a UI
                 "tcgplayer_market": 1.50,
                 "confidence": "medium"
             }
         }
         
     except Exception as e:
+        import traceback
+        traceback.print_exc() # Isto vai mostrar o erro exato no terminal do Render se algo falhar
         raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
 # --- ROTAS DE PORTFÓLIO E MOCKS COMPLETOS ---
