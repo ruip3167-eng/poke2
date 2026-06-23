@@ -31,8 +31,8 @@ class ScanRequest(BaseModel):
     user_id: Optional[str] = None
 
 class CardSaveRequest(BaseModel):
-    user_id: str
-    card_data: Dict[str, Any]
+    user_id: Optional[str] = None
+    card_data: Optional[Dict[str, Any]] = None
 
 @app.get("/")
 def read_root():
@@ -65,17 +65,16 @@ async def scan_card(payload: ScanRequest):
             mime_type="image/jpeg"
         )
         
-        # PROMPT APERFEIÇOADO: Exige precisão absoluta baseada apenas na imagem enviada
         prompt = (
-            "Analyze this exact Pokemon card photo. Look closely at the name and card number. "
-            "Return a JSON object. Translate the name to the official English name. "
+            "Analyze this exact Pokemon card photo. Look closely at the artwork, the name text, and the collector number at the bottom. "
+            "You must return a JSON object with the official English name of the Pokemon, the correct English set name, and its number. "
             "Estimate its current TCGplayer market price in USD as a float. "
             "Return keys exactly: 'name', 'set_name', 'number', 'market_price', 'image_url', 'id'."
         )
         
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
-            temperature=0.0  # Temperatura 0 obriga a IA a ser factual e não inventar nomes
+            temperature=0.0
         )
 
         response = client.models.generate_content(
@@ -99,16 +98,14 @@ async def scan_card(payload: ScanRequest):
         card_number = ia_data.get("number", "000")
         set_name = ia_data.get("set_name", "Unknown Set")
         market_price = ia_data.get("market_price", 0.99)
-        image_url = ia_data.get("image_url", "https://images.pokemontcg.io/sv1/140.png")
-        card_id = ia_data.get("id", f"fallback_{card_number}")
+        image_url = ia_data.get("image_url", "https://images.pokemontcg.io/sv1/63.png")
+        card_id = ia_data.get("id", f"card_{card_number}")
 
         try:
             market_price = float(market_price)
         except:
             market_price = 0.99
 
-        # EQUAÇÃO DE COMPATIBILIDADE DA APP: 
-        # Enviamos o formato plano e a estrutura aninhada para garantir que a sua UI lê de qualquer maneira!
         return {
             "success": True,
             "name": card_name,
@@ -130,41 +127,53 @@ async def scan_card(payload: ScanRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
-# === NOVA ROTA: LISTAGEM DE COLEÇÕES PARA A PROCURA MANUAL ===
 @app.get("/api/sets")
 async def list_sets():
-    # Devolve uma lista estruturada das principais coleções que a sua App espera ler
     return [
         {"id": "sv1", "name": "Scarlet & Violet Base Set", "series": "Scarlet & Violet", "printed_total": 198},
         {"id": "sv2", "name": "Paldea Evolved", "series": "Scarlet & Violet", "printed_total": 193},
         {"id": "sv3", "name": "Obsidian Flames", "series": "Scarlet & Violet", "printed_total": 197},
-        {"id": "sv4", "name": "Paradox Rift", "series": "Scarlet & Violet", "printed_total": 182},
-        {"id": "sv5", "name": "Temporal Forces", "series": "Scarlet & Violet", "printed_total": 162}
+        {"id": "sv3pt5", "name": "151", "series": "Scarlet & Violet", "printed_total": 165}
     ]
 
-# === NOVA ROTA: OBTENÇÃO DE PREÇO INDIVIDUAL MANUAL ===
 @app.get("/api/price")
 async def get_manual_price(name: str, set_name: Optional[str] = None, number: Optional[str] = None):
-    # Quando o utilizador corrige ou procura manualmente, gera uma resposta estável
     return {
         "name": name,
-        "set_name": set_name if set_name else "Scarlet & Violet",
-        "number": number if number else "000",
+        "set_name": set_name or "Scarlet & Violet",
+        "number": number or "000",
         "image_url": "https://images.pokemontcg.io/sv1/63.png",
-        "tcgplayer_market": 0.25,
+        "tcgplayer_market": 0.50,
         "currency": "USD"
     }
 
-# --- ROTAS DE PORTFÓLIO E MOCKS COMPLETOS ---
+@app.get("/api/cards/search")
+async def search_cards(set_id: str, name: str):
+    print(f"[PROCURA MANUAL] A pesquisar na coleção {set_id} por: {name}")
+    return [{
+        "card_id": f"{set_id}-manual",
+        "name": name,
+        "set_name": "Coleção Manual",
+        "number": "000",
+        "image_url": "https://images.pokemontcg.io/sv1/63.png",
+        "tcgplayer_market": 1.20,
+        "currency": "USD"
+    }]
+
+@app.post("/api/portfolio/save")
+async def save_card(payload: Dict[str, Any]):
+    print(f"[PORTFÓLIO] Dados recebidos para guardar: {payload}")
+    return {
+        "success": True, 
+        "message": "Guardado com sucesso no mock", 
+        "id": "mock_saved_123"
+    }
+
 @app.get("/api/portfolio")
 @app.get("/api/portfolio/")
 @app.get("/api/portfolio/{user_id}")
 async def get_portfolio(user_id: Optional[str] = None):
     return []
-
-@app.post("/api/portfolio/save")
-async def save_card(payload: CardSaveRequest):
-    return {"success": True, "message": "Guardado", "id": "mock_123"}
 
 @app.delete("/api/portfolio/{card_id}")
 async def delete_card(card_id: str):
@@ -178,3 +187,4 @@ async def handle_scan_count(user_id: str):
 @app.post("/api/scan/upgrade/{user_id}")
 async def upgrade_user(user_id: str):
     return {"count": 0, "free_limit": 99999, "is_pro": True}
+
