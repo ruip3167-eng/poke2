@@ -47,7 +47,7 @@ async def scan_card(payload: ScanRequest):
         b64_data = payload.image_base64
         if "," in b64_data:
             parts = b64_data.split(",")
-            b64_data = parts if len(parts) > 1 else parts
+            b64_data = parts[1] if len(parts) > 1 else parts[0]
             
         b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
         
@@ -93,7 +93,7 @@ async def scan_card(payload: ScanRequest):
         ia_data = json.loads(text_clean)
         
         card_name = ia_data.get("name", "Unknown Card")
-        card_number = ia_data.get("number", "000")
+        card_number = ia_data.get("number", "1")
         set_name = ia_data.get("set_name", "Unknown Set")
         market_price = ia_data.get("market_price", 0.99)
 
@@ -102,13 +102,15 @@ async def scan_card(payload: ScanRequest):
         except:
             market_price = 0.99
 
-        # === CONSTRUÇÃO CIRÚRGICA DE IMAGEM REAL ===
-        # Limpa o número (ex: extrai 63 de 063/078)
-        clean_num = str(card_number).strip().split("/")[0].lstrip("0")
+        # === CORREÇÃO DA EXTRAÇÃO E CONSTRUÇÃO DA IMAGEM ===
+        card_str = str(card_number).strip()
+        if "/" in card_str:
+            card_str = card_str.split("/")[0].strip()
+            
+        clean_num = card_str.lstrip("0")
         if not clean_num:
             clean_num = "1"
             
-        # Determina uma coleção padrão para o link de imagem com base no nome do Set
         set_prefix = "sv1"
         if "paldea" in set_name.lower():
             set_prefix = "sv2"
@@ -117,9 +119,8 @@ async def scan_card(payload: ScanRequest):
         elif "151" in set_name.lower():
             set_prefix = "sv3pt5"
         elif "flashfire" in set_name.lower():
-            set_prefix = "xy2" # Mapeamento real para coleções clássicas antigas
+            set_prefix = "xy2"
 
-        # Constrói o link oficial do repositório pokemontcg.io
         image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}.png"
         card_id = f"{set_prefix}-{clean_num}"
 
@@ -144,37 +145,18 @@ async def scan_card(payload: ScanRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
-@app.get("/api/sets")
-async def list_sets():
-    return [
-        {"id": "sv1", "name": "Scarlet & Violet Base Set", "series": "Scarlet & Violet", "printed_total": 198},
-        {"id": "sv2", "name": "Paldea Evolved", "series": "Scarlet & Violet", "printed_total": 193},
-        {"id": "sv3", "name": "Obsidian Flames", "series": "Scarlet & Violet", "printed_total": 197},
-        {"id": "sv3pt5", "name": "151", "series": "Scarlet & Violet", "printed_total": 165}
-    ]
-
-@app.get("/api/price")
-async def get_manual_price(name: str, set_name: Optional[str] = None, number: Optional[str] = None):
-    return {
-        "name": name,
-        "set_name": set_name or "Scarlet & Violet",
-        "number": number or "000",
-        "image_url": "https://images.pokemontcg.io/sv1/63.png",
-        "tcgplayer_market": 0.50,
-        "currency": "USD"
-    }
-
 @app.get("/api/cards/search")
 async def search_cards(set_id: str, name: str):
     print(f"[PROCURA MANUAL] A pesquisar na coleção {set_id} por: {name}")
     
-    # Mapeia dinamicamente uma imagem válida da coleção selecionada
+    # Criamos um ID dinâmico e usamos uma imagem base estável do repositório
     return [{
+        "id": f"{set_id}-manual-{name.lower()}",
         "card_id": f"{set_id}-manual-{name.lower()}",
         "name": name.strip().title(),
         "set_name": f"Coleção {set_id.upper()}",
         "number": "1",
-        "image_url": f"https://pokemontcg.io{set_id}/1.png", # Pega na primeira carta da coleção real
+        "image_url": f"https://pokemontcg.io{set_id}/1.png",
         "tcgplayer_market": 1.20,
         "currency": "USD"
     }]
