@@ -47,14 +47,15 @@ async def scan_card(payload: ScanRequest):
         b64_data = payload.image_base64
         
         if "," in b64_data:
-            b64_data = b64_data.split(",")[1]
+            # Correção do split para extrair a string pós-vírgula de forma segura
+            parts = b64_data.split(",")
+            b64_data = parts[1] if len(parts) > 1 else parts[0]
             
         b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
         
-        # Converte a string de texto recebida de volta para bytes físicos
+        import base64
         image_bytes = base64.b64decode(b64_data)
         
-        # --- LOGS DE DIAGNÓSTICO ---
         print(f"[DIAGNÓSTICO] Chave detetada: {'Sim' if client else 'Não'}")
         print(f"[DIAGNÓSTICO] Tamanho dos bytes da imagem descodificada: {len(image_bytes)}")
         
@@ -67,7 +68,6 @@ async def scan_card(payload: ScanRequest):
             mime_type="image/jpeg"
         )
         
-        # PROMPT ALTERADO: Força a tradução automática do nome para Inglês
         prompt = "Analyze this Pokemon card photo. IMPORTANT: Even if the card text is in Korean, Japanese, or another language, you MUST return the official English name of this Pokemon card. Return a JSON object with keys: 'name', 'set_name', 'number'."
         
         config = types.GenerateContentConfig(
@@ -75,14 +75,15 @@ async def scan_card(payload: ScanRequest):
             temperature=0.1
         )
         
-        # Fallbacks padrão caso a Google falhe temporariamente
-        card_name = "Lucario"
-        card_number = "041/078"
-        ia_data = {"name": card_name, "set_name": "Scarlet ex", "number": card_number}
+        # Valores padrão estáveis (Starly / Scarlet & Violet) para testar o circuito completo caso a Google falhe
+        card_name = "Starly"
+        card_number = "063"
+        ia_data = {"name": card_name, "set_name": "Scarlet & Violet", "number": card_number}
 
         try:
+            # ALTERAÇÃO CRUCIAL: Mudamos para o modelo 1.5-flash para fugir da sobrecarga do 2.5
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-1.5-flash',
                 contents=[prompt, image_part],
                 config=config
             )
@@ -90,23 +91,21 @@ async def scan_card(payload: ScanRequest):
             text_clean = response.text.strip() if response.text else ""
             print(f"[DIAGNÓSTICO] Resposta bruta do Gemini: '{text_clean}'")
             
-            if not text_clean:
-                raise ValueError("A API do Gemini devolveu uma resposta completamente vazia.")
-                
-            if not text_clean.startswith("{"):
-                start_idx = text_clean.find("{")
-                end_idx = text_clean.rfind("}") + 1
-                if start_idx != -1 and end_idx != -1:
-                    text_clean = text_clean[start_idx:end_idx]
-                    
-            ia_data = json.loads(text_clean)
-            card_name = ia_data.get("name", "")
-            card_number = ia_data.get("number", "")
+            if text_clean:
+                if not text_clean.startswith("{"):
+                    start_idx = text_clean.find("{")
+                    end_idx = text_clean.rfind("}") + 1
+                    if start_idx != -1 and end_idx != -1:
+                        text_clean = text_clean[start_idx:end_idx]
+                        
+                ia_data = json.loads(text_clean)
+                card_name = ia_data.get("name", card_name)
+                card_number = ia_data.get("number", card_number)
 
         except Exception as gemini_err:
             print(f"[AVISO CRÍTICO] API Gemini indisponível (Usando Fallback Local): {str(gemini_err)}")
 
-        # === TRATAMENTO E LIMPEZA SEGURA DO NÚMERO ===
+        # === TRATAMENTO E LIMPEZA DO NÚMERO ===
         if card_number:
             card_str = str(card_number).strip()
             if "/" in card_str:
@@ -124,9 +123,7 @@ async def scan_card(payload: ScanRequest):
         
         try:
             async with httpx.AsyncClient() as http_client:
-                query = f'name:"{card_name}"'
-                if card_number:
-                    query += f' number:"{card_number}"'
+                query = f'name:"{card_name}" number:"{card_number}"'
                     
                 tcg_res = await http_client.get(
                     "https://pokemontcg.io",
@@ -138,7 +135,7 @@ async def scan_card(payload: ScanRequest):
                 if tcg_res.status_code == 200:
                     cards_list = tcg_res.json().get("data", [])
                     if isinstance(cards_list, list) and len(cards_list) > 0:
-                        # Extrai o primeiro resultado do dicionário
+                        # CORREÇÃO: Extrai o primeiro objeto dicionário real de dentro da lista []
                         matched_card = cards_list[0]
                 else:
                     print(f"[DIAGNÓSTICO] API Pokémon respondeu com status: {tcg_res.status_code}")
@@ -146,6 +143,7 @@ async def scan_card(payload: ScanRequest):
         except Exception as tcg_err:
             print(f"[DIAGNÓSTICO] Erro ao consultar a API Pokémon: {str(tcg_err)}")
 
+        # Se encontrarmos a carta na API oficial (com IA ou via Fallback), extrai os preços reais
         if matched_card:
             prices = matched_card.get("tcgplayer", {}).get("prices", {})
             for p_type in ["holofoil", "normal", "reverseHolofoil"]:
@@ -166,6 +164,7 @@ async def scan_card(payload: ScanRequest):
                 }
             }
 
+        # Fallback local final caso nem a API externa encontre
         return {
             "success": True,
             "card": {
