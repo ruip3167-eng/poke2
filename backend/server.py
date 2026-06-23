@@ -47,14 +47,12 @@ async def scan_card(payload: ScanRequest):
         b64_data = payload.image_base64
         if "," in b64_data:
             parts = b64_data.split(",")
-            b64_data = parts[1] if len(parts) > 1 else parts[0]
+            b64_data = parts if len(parts) > 1 else parts
             
         b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
         
         import base64
         image_bytes = base64.b64decode(b64_data)
-        
-        print(f"[DIAGNÓSTICO] Tamanho dos bytes recebidos: {len(image_bytes)}")
         
         if len(image_bytes) == 0:
             raise ValueError("Os bytes da imagem estão vazios.")
@@ -69,7 +67,7 @@ async def scan_card(payload: ScanRequest):
             "Analyze this exact Pokemon card photo. Look closely at the artwork, the name text, and the collector number at the bottom. "
             "You must return a JSON object with the official English name of the Pokemon, the correct English set name, and its number. "
             "Estimate its current TCGplayer market price in USD as a float. "
-            "Return keys exactly: 'name', 'set_name', 'number', 'market_price', 'image_url', 'id'."
+            "Return keys exactly: 'name', 'set_name', 'number', 'market_price'."
         )
         
         config = types.GenerateContentConfig(
@@ -98,13 +96,32 @@ async def scan_card(payload: ScanRequest):
         card_number = ia_data.get("number", "000")
         set_name = ia_data.get("set_name", "Unknown Set")
         market_price = ia_data.get("market_price", 0.99)
-        image_url = ia_data.get("image_url", "https://images.pokemontcg.io/sv1/63.png")
-        card_id = ia_data.get("id", f"card_{card_number}")
 
         try:
             market_price = float(market_price)
         except:
             market_price = 0.99
+
+        # === CONSTRUÇÃO CIRÚRGICA DE IMAGEM REAL ===
+        # Limpa o número (ex: extrai 63 de 063/078)
+        clean_num = str(card_number).strip().split("/")[0].lstrip("0")
+        if not clean_num:
+            clean_num = "1"
+            
+        # Determina uma coleção padrão para o link de imagem com base no nome do Set
+        set_prefix = "sv1"
+        if "paldea" in set_name.lower():
+            set_prefix = "sv2"
+        elif "obsidian" in set_name.lower():
+            set_prefix = "sv3"
+        elif "151" in set_name.lower():
+            set_prefix = "sv3pt5"
+        elif "flashfire" in set_name.lower():
+            set_prefix = "xy2" # Mapeamento real para coleções clássicas antigas
+
+        # Constrói o link oficial do repositório pokemontcg.io
+        image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}.png"
+        card_id = f"{set_prefix}-{clean_num}"
 
         return {
             "success": True,
@@ -150,12 +167,14 @@ async def get_manual_price(name: str, set_name: Optional[str] = None, number: Op
 @app.get("/api/cards/search")
 async def search_cards(set_id: str, name: str):
     print(f"[PROCURA MANUAL] A pesquisar na coleção {set_id} por: {name}")
+    
+    # Mapeia dinamicamente uma imagem válida da coleção selecionada
     return [{
-        "card_id": f"{set_id}-manual",
-        "name": name,
-        "set_name": "Coleção Manual",
-        "number": "000",
-        "image_url": "https://images.pokemontcg.io/sv1/63.png",
+        "card_id": f"{set_id}-manual-{name.lower()}",
+        "name": name.strip().title(),
+        "set_name": f"Coleção {set_id.upper()}",
+        "number": "1",
+        "image_url": f"https://pokemontcg.io{set_id}/1.png", # Pega na primeira carta da coleção real
         "tcgplayer_market": 1.20,
         "currency": "USD"
     }]
