@@ -47,7 +47,7 @@ async def scan_card(payload: ScanRequest):
         b64_data = payload.image_base64
         if "," in b64_data:
             parts = b64_data.split(",")
-            b64_data = parts if len(parts) > 1 else parts
+            b64_data = parts[1] if len(parts) > 1 else parts[0]
             
         b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
         
@@ -114,10 +114,10 @@ async def scan_card(payload: ScanRequest):
         except:
             market_price = 0.05
 
-        # === CONSTRUÇÃO DO LINK DE IMAGEM INFALÍVEL ===
+        # === FIX DA LIMPEZA: Extrai o índice string antes de usar o strip/lstrip ===
         card_str = str(card_number).strip()
         if "/" in card_str:
-            card_str = card_str.split("/")[0].strip()
+            card_str = card_str.split("/")[0].strip()  # Pega o primeiro item da lista antes de limpar
             
         clean_num = card_str.lstrip("0")
         if not clean_num:
@@ -130,12 +130,14 @@ async def scan_card(payload: ScanRequest):
             set_prefix = "sv3"
         elif "151" in set_name.lower():
             set_prefix = "sv3pt5"
-        elif "sword" in set_name.lower():
+        elif "sword" in set_name.lower() or "shsh" in set_name.lower():
             set_prefix = "swsh1"
 
-        # 👑 Link corrigido com a barra oficial do repositório da Nintendo/Pokémon TCG
-        image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}.png"
+        # Link com formatação de barras e extensões corrigidas
+        image_url = f"https://images.pokemontcg.io/{set_prefix}/{clean_num}.png"
         card_id = f"{set_prefix}-{clean_num}"
+        
+        print(f"[IMAGEM GERADA] URL final: {image_url}")
 
         return {
             "success": True,
