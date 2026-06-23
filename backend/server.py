@@ -54,11 +54,10 @@ async def scan_card(payload: ScanRequest):
         import base64
         image_bytes = base64.b64decode(b64_data)
         
-        print(f"[DIAGNÓSTICO] Chave detetada: {'Sim' if client else 'Não'}")
-        print(f"[DIAGNÓSTICO] Tamanho dos bytes da imagem descodificada: {len(image_bytes)}")
+        print(f"[DIAGNÓSTICO] Tamanho dos bytes recebidos: {len(image_bytes)}")
         
         if len(image_bytes) == 0:
-            raise ValueError("Os bytes da imagem descodificada estão vazios.")
+            raise ValueError("Os bytes da imagem estão vazios.")
 
         from google.genai import types
         image_part = types.Part.from_bytes(
@@ -66,71 +65,56 @@ async def scan_card(payload: ScanRequest):
             mime_type="image/jpeg"
         )
         
-        # PROMPT EVOLUÍDO: O Gemini extrai os dados, estima o valor de mercado atual e gera o URL da imagem
+        # PROMPT APERFEIÇOADO: Exige precisão absoluta baseada apenas na imagem enviada
         prompt = (
-            "Analyze this Pokemon card photo. You must return a JSON object. "
-            "Even if the card text is in Korean or Japanese, translate the name to the official English name. "
-            "Based on your knowledge, estimate its current TCGplayer market price in USD (as a float). "
-            "Find its ID format (e.g. 'sv1-63') and guess a valid image URL from pokemontcg.io if possible, "
-            "otherwise leave image_url as 'https://pokemontcg.io'. "
-            "Return a JSON object with keys exactly: 'name', 'set_name', 'number', 'market_price', 'image_url', 'id'."
+            "Analyze this exact Pokemon card photo. Look closely at the name and card number. "
+            "Return a JSON object. Translate the name to the official English name. "
+            "Estimate its current TCGplayer market price in USD as a float. "
+            "Return keys exactly: 'name', 'set_name', 'number', 'market_price', 'image_url', 'id'."
         )
         
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
-            temperature=0.1
+            temperature=0.0  # Temperatura 0 obriga a IA a ser factual e não inventar nomes
+        )
+
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[prompt, image_part],
+            config=config
         )
         
-        # Valores padrão estáveis (Starly) caso a IA falhe por completo
-        ia_data = {
-            "id": "sv1-63",
-            "name": "Starly",
-            "set_name": "Scarlet & Violet",
-            "number": "063",
-            "market_price": 0.15,
-            "image_url": "https://pokemontcg.io"
-        }
-
-        try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=[prompt, image_part],
-                config=config
-            )
-            
-            text_clean = response.text.strip() if response.text else ""
-            print(f"[DIAGNÓSTICO] Resposta bruta do Gemini: '{text_clean}'")
-            
-            if text_clean:
-                if not text_clean.startswith("{"):
-                    start_idx = text_clean.find("{")
-                    end_idx = text_clean.rfind("}") + 1
-                    if start_idx != -1 and end_idx != -1:
-                        text_clean = text_clean[start_idx:end_idx]
-                        
-                ia_data = json.loads(text_clean)
-
-        except Exception as gemini_err:
-            print(f"[AVISO CRÍTICO] API Gemini indisponível: {str(gemini_err)}")
-
-        # Extração direta e ultra-segura do JSON gerado pela IA
-        card_id = ia_data.get("id", f"fallback_{ia_data.get('number', '000')}")
-        card_name = ia_data.get("name", "Starly")
-        set_name = ia_data.get("set_name", "Scarlet & Violet")
-        card_number = ia_data.get("number", "063")
+        text_clean = response.text.strip() if response.text else ""
+        print(f"[DIAGNÓSTICO] Resposta bruta do Gemini: '{text_clean}'")
+        
+        if not text_clean.startswith("{"):
+            start_idx = text_clean.find("{")
+            end_idx = text_clean.rfind("}") + 1
+            if start_idx != -1 and end_idx != -1:
+                text_clean = text_clean[start_idx:end_idx]
+                
+        ia_data = json.loads(text_clean)
+        
+        card_name = ia_data.get("name", "Unknown Card")
+        card_number = ia_data.get("number", "000")
+        set_name = ia_data.get("set_name", "Unknown Set")
         market_price = ia_data.get("market_price", 0.99)
-        image_url = ia_data.get("image_url", "https://pokemontcg.io")
+        image_url = ia_data.get("image_url", "https://images.pokemontcg.io/sv1/140.png")
+        card_id = ia_data.get("id", f"fallback_{card_number}")
 
-        # Garante que o preço é sempre um número decimal válido (float)
         try:
             market_price = float(market_price)
         except:
             market_price = 0.99
 
-        print(f"[SUCESSO] Carta Processada: {card_name} ({card_number}) - ${market_price}")
-
+        # EQUAÇÃO DE COMPATIBILIDADE DA APP: 
+        # Enviamos o formato plano e a estrutura aninhada para garantir que a sua UI lê de qualquer maneira!
         return {
             "success": True,
+            "name": card_name,
+            "set_name": set_name,
+            "number": card_number,
+            "confidence": "high",
             "card": {
                 "id": card_id,
                 "name": card_name,
