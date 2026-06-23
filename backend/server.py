@@ -200,24 +200,64 @@ async def search_cards(set_id: str, name: str):
 
 # === ROTAS DE PORTFÓLIO E MOCKS COMPLETOS ===
 
+# === MEMÓRIA TEMPORÁRIA LOCAL (Para as cartas não desaparecerem do ecrã) ===
+PORTFOLIO_DB = []
+
 @app.post("/api/portfolio/save")
 async def save_card(payload: Dict[str, Any]):
-    print(f"[PORTFÓLIO] Dados salvos com sucesso: {payload}")
+    import uuid
+    from datetime import datetime
+    
+    # Se a app enviar os dados soltos, estruturamos exatamente como a sua UI precisa de ler de volta
+    card_id = payload.get("id") or payload.get("card_id") or f"card_{str(uuid.uuid4())[:8]}"
+    
+    new_record = {
+        "id": card_id,
+        "user_id": payload.get("user_id", "default_user"),
+        "name": payload.get("name", "Unknown"),
+        "set_name": payload.get("set_name", "Scarlet & Violet"),
+        "number": payload.get("number", "000"),
+        "image_url": payload.get("image_url", "").replace(".iosv1", ".io/sv1"), # Auto-correção caso falte a barra
+        "market_price": float(payload.get("market_price", 0.99)),
+        "estimated_value": float(payload.get("estimated_value", 0.99)),
+        "condition": payload.get("condition", {
+            "centering": "near_mint", "corners": "near_mint", 
+            "edges": "near_mint", "surface": "near_mint", 
+            "whitening": False, "scratches": False
+        }),
+        "condition_grade": payload.get("condition_grade", "Near Mint"),
+        "condition_multiplier": float(payload.get("condition_multiplier", 1.0)),
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "tcgplayer_market": float(payload.get("tcgplayer_market", 0.99)),
+        "card_id": card_id
+    }
+    
+    # Guarda na nossa lista temporária em vez de deitar fora
+    PORTFOLIO_DB.append(new_record)
+    print(f"[PORTFÓLIO] Carta guardada com sucesso! Total no banco: {len(PORTFOLIO_DB)}")
+    
     return {
         "success": True, 
         "message": "Guardado com sucesso no servidor", 
-        "id": "mock_saved_123"
+        "id": card_id,
+        "card": new_record
     }
 
 @app.get("/api/portfolio")
 @app.get("/api/portfolio/")
 @app.get("/api/portfolio/{user_id}")
 async def get_portfolio(user_id: Optional[str] = None):
-    return []
+    print(f"[PORTFÓLIO] Telemóvel pediu a lista. A enviar {len(PORTFOLIO_DB)} cartas.")
+    # Devolve a lista com todas as cartas que guardou desde o último arranque
+    return PORTFOLIO_DB
 
 @app.delete("/api/portfolio/{card_id}")
 async def delete_card(card_id: str):
-    return {"success": True, "deleted": 1}
+    global PORTFOLIO_DB
+    inicial_len = len(PORTFOLIO_DB)
+    PORTFOLIO_DB = [c for c in PORTFOLIO_DB if c.get("id") != card_id and c.get("card_id") != card_id]
+    print(f"[PORTFÓLIO] Carta {card_id} eliminada.")
+    return {"success": True, "deleted": inicial_len - len(PORTFOLIO_DB)}
 
 @app.get("/api/scan/count/{user_id}")
 @app.post("/api/scan/count/{user_id}")
