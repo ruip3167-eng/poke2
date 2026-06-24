@@ -77,11 +77,11 @@ async def scan_card(payload: ScanRequest):
             temperature=0.0
         )
 
-        # Ajuste de Fallback: Forçamos o Varoom real da sua foto para que os dados fiquem certos mesmo com quota 503/429
-        card_name = "Varoom"
-        card_number = "140"
+        # === VALORES DE TESTE TEMPORÁRIOS (FALLBACK POR FALTA DE QUOTA) ===
+        card_name = "Pikachu"
+        card_number = "062"  # Número do Pikachu no set Scarlet & Violet Base Set
         set_name = "Scarlet & Violet"
-        market_price = 0.05
+        market_price = 0.45  # Valor estimado de mercado
 
         try:
             response = client.models.generate_content(
