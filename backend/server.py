@@ -224,13 +224,17 @@ async def scan_card(payload: ScanRequest):
         except:
             market_price = 0.05
 
-        card_str = str(card_number).strip().split("/")
-        clean_num = "".join(c for c in card_str[0] if c.isdigit())
+        # CORREÇÃO DA EXTRAÇÃO DO NÚMERO (Sem quebras de Lista)
+        numero_bruto = str(card_number).strip()
+        if "/" in numero_bruto:
+            numero_bruto = numero_bruto.split("/")[0]
+            
+        clean_num = "".join(c for c in numero_bruto if c.isdigit())
         
         if not clean_num:
             clean_num = "1"
         else:
-            clean_num = str(int(clean_num))
+            clean_num = str(int(clean_num)) # Remove zeros à esquerda (ex: 062 -> 62)
             
         set_prefix = "sv1"
         set_name_lower = str(set_name).lower().strip()
@@ -258,8 +262,8 @@ async def scan_card(payload: ScanRequest):
         elif "sword" in set_name_lower or "shsh" in set_name_lower:
             set_prefix = "swsh1"
 
-	# Constrói o link oficial higienizado com o subdomínio correto da CDN
-        image_url = f"https://images.pokemontcg.io/{set_prefix}/{clean_num}_hires.png"
+        # Constrói o link oficial higienizado com o subdomínio correto da CDN
+        image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}_hires.png"
         card_id = f"{set_prefix}-{clean_num}"
         
         print(f"[SISTEMA DE MÍDIA] URL FINAL DA IMAGEM: {image_url}")
