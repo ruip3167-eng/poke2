@@ -159,12 +159,15 @@ async def scan_card(payload: ScanRequest):
                 return {
                     "success": True,
                     "cached": True,
-                    "name": carta_em_cache["name"],
-                    "set_name": carta_em_cache["set_name"],
-                    "number": carta_em_cache["number"],
-                    "confidence": "high",
-                    "card": carta_em_cache["card"]
+                    "id": carta_em_cache.get("id"),
+                    "name": carta_em_cache.get("name"),
+                    "set_name": carta_em_cache.get("set_name"),
+                    "number": carta_em_cache.get("number"),
+                    "image_url": carta_em_cache.get("image_url"),
+                    "tcgplayer_market": carta_em_cache.get("tcgplayer_market"),
+                    "confidence": "high"
                 }
+
         # ====================================
 
         # Valores padrão de Fallback
@@ -277,22 +280,28 @@ async def scan_card(payload: ScanRequest):
                 "userId": payload.user_id,
                 "image_hash": image_hash,
                 "scannedAt": datetime.now(timezone.utc),
+                "id": card_id,
                 "name": card_name,
                 "set_name": set_name,
                 "number": card_number,
-                "card": resposta_final
+                "image_url": image_url,
+                "tcgplayer_market": market_price,
+                "confidence": "high"
             }
             history_collection.insert_one(documento_historico)
             print(f"💾 [MDB] Registo guardado com sucesso na base de dados (Hash: {image_hash})")
 
+        # RETORNO CORRIGIDO: Propriedades soltas na raiz para o card-detail.tsx ler diretamente
         return {
             "success": True,
             "cached": False,
+            "id": card_id,
             "name": card_name,
             "set_name": set_name,
             "number": card_number,
-            "confidence": "high",
-            "card": resposta_final
+            "image_url": image_url,
+            "tcgplayer_market": market_price,
+            "confidence": "high"
         }
         
     except Exception as e:
