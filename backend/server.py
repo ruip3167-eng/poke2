@@ -120,7 +120,7 @@ async def scan_card(payload: ScanRequest):
         if not autorizado:
             raise HTTPException(
                 status_code=429, 
-                detail=f"Limite diário de {LIMIT_FREE_SCANS} scans atingido. Faça upgrade para o Premium para obter acesso ilimitado!"
+                detail="Limite diário de 5 scans atingido. Faça upgrade para o Premium para obter acesso ilimitado!"
             )
     else:
         raise HTTPException(status_code=400, detail="O ID do utilizador (user_id) é obrigatório para realizar scans.")
@@ -136,7 +136,6 @@ async def scan_card(payload: ScanRequest):
             parts = b64_data.split(",")
             b64_data = parts[1] if len(parts) > 1 else parts[0]
             
-        # Agora o .strip() e .replace() funcionam perfeitamente porque b64_data é uma String!
         b64_data = str(b64_data).strip().replace("\n", "").replace("\r", "").replace(" ", "")
         
         # Correção automática de preenchimento (Padding) do Base64
@@ -168,7 +167,7 @@ async def scan_card(payload: ScanRequest):
                 }
         # ====================================
 
-        # Valores padrão de Fallback (Ajustados para o Tatsugiri da imagem)
+        # Valores padrão de Fallback
         card_name = "Tatsugiri"
         card_number = "062"
         set_name = "Scarlet & Violet"
@@ -222,16 +221,14 @@ async def scan_card(payload: ScanRequest):
         except:
             market_price = 0.05
 
-        # 🌟 CORREÇÃO 1: Limpeza absoluta de caracteres não numéricos do contador
-        card_str = str(card_number).strip().split("/")[0]  # Se for "62/198", extrai "62"
-        clean_num = "".join(c for c in card_str if c.isdigit()) # Remove letras acidentais
+        card_str = str(card_number).strip().split("/")
+        clean_num = "".join(c for c in card_str[0] if c.isdigit())
         
         if not clean_num:
             clean_num = "1"
         else:
-            clean_num = str(int(clean_num)) # Remove zeros à esquerda de forma segura (ex: "062" -> "62")
-
-        # 🌟 CORREÇÃO 2: Normalização do ID do set
+            clean_num = str(int(clean_num))
+            
         set_prefix = "sv1"
         set_name_lower = str(set_name).lower().strip()
         
@@ -258,11 +255,11 @@ async def scan_card(payload: ScanRequest):
         elif "sword" in set_name_lower or "shsh" in set_name_lower:
             set_prefix = "swsh1"
 
-        # Constrói o link oficial higienizado
-        image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}_hires.png"
+	# Constrói o link oficial higienizado com o subdomínio correto da CDN
+        image_url = f"https://images.pokemontcg.io/{set_prefix}/{clean_num}_hires.png"
         card_id = f"{set_prefix}-{clean_num}"
         
-        print(f"\n[SISTEMA DE MÍDIA] URL FINAL DA IMAGEM: {image_url}\n")
+        print(f"[SISTEMA DE MÍDIA] URL FINAL DA IMAGEM: {image_url}")
 
         resposta_final = {
             "id": card_id,
@@ -278,8 +275,8 @@ async def scan_card(payload: ScanRequest):
         if history_collection is not None:
             documento_historico = {
                 "userId": payload.user_id,
-                "image_hash": image_hash,                # 🌟 Verifique se tem esta vírgula!
-                "scannedAt": datetime.now(timezone.utc), # 🌟 Verifique se tem esta vírgula!
+                "image_hash": image_hash,
+                "scannedAt": datetime.now(timezone.utc),
                 "name": card_name,
                 "set_name": set_name,
                 "number": card_number,
@@ -288,7 +285,6 @@ async def scan_card(payload: ScanRequest):
             history_collection.insert_one(documento_historico)
             print(f"💾 [MDB] Registo guardado com sucesso na base de dados (Hash: {image_hash})")
 
-        # RETORNO ESTRUTURADO FINAL PARA O SMARTPHONE
         return {
             "success": True,
             "cached": False,
