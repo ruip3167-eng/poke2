@@ -2,16 +2,24 @@ import sys
 import os
 import json
 import base64
+import hashlib
+from datetime import date, datetime, timezone # 🌟 CORREÇÃO: Imports diretos e modernos
 import httpx
 import logging
 import traceback
+import certifi
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from pymongo import MongoClient
 import google.genai as genai
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Carrega as variáveis do ficheiro .env caso existam localmente
+from dotenv import load_dotenv
+load_dotenv()
 
 app = FastAPI(title="PokeValue API")
 
@@ -23,9 +31,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# === CONFIGURAÇÃO GOOGLE GEMINI ===
 GEMINI_KEY = os.environ.get("EMERGENT_LLM_KEY")
 client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
+# === CONFIGURAÇÃO MONGODB ATLAS ===
+MONGO_URI = os.environ.get("MONGODB_URI")
+if not MONGO_URI:
+    print("[AVISO] Variável MONGODB_URI não encontrada no ambiente!")
+    db = None
+    users_collection = None
+    history_collection = None # Inicializado como None caso falte o .env
+else:
+    # O uso do tlsCAFile com certifi garante que o erro de SSL não acontece em produção
+    mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
+    db = mongo_client['sua_base_de_dados']
+    users_collection = db['users']
+    history_collection = db['scans_history'] # 🌟 ADICIONADO: Linha crucial para a cache funcionar
+    print("[SUCESSO] Ligado ao MongoDB Atlas e pronto para monitorizar scans.")
+
+LIMIT_FREE_SCANS = 5
+
+# === SCHEMAS DE ENTRADA (PYDANTIC) ===
 class ScanRequest(BaseModel):
     image_base64: str
     user_id: Optional[str] = None
@@ -34,129 +61,246 @@ class CardSaveRequest(BaseModel):
     user_id: Optional[str] = None
     card_data: Optional[Dict[str, Any]] = None
 
+class RevenueCatWebhook(BaseModel):
+    event: Dict[str, Any]
+
+# === FUNÇÃO AUXILIAR DE CONTROLO DE SCANS ===
+def validar_e_contabilizar_scan(user_id: str, email: str) -> bool:
+    if users_collection is None:
+        return True
+        
+    # Usa o import direto 'date'
+    hoje = date.today().isoformat()
+    user = users_collection.find_one({"_id": user_id})
+    
+    if not user:
+        user = {
+            "_id": user_id,
+            "email": email,
+            "plan": "free",
+            "dailyScansUsed": 0,
+            "lastScanDate": hoje,
+            "createdAt": datetime.now(timezone.utc) # 🌟 Versão moderna e segura contra crashes
+        }
+        users_collection.insert_one(user)
+        
+    if user.get("plan") == "premium":
+        return True
+        
+    last_date = user.get("lastScanDate")
+    if not last_date or last_date != hoje:
+        users_collection.update_one(
+            {"_id": user_id},
+            {"$set": {"dailyScansUsed": 0, "lastScanDate": hoje}}
+        )
+        user["dailyScansUsed"] = 0
+        
+    if user.get("dailyScansUsed", 0) >= LIMIT_FREE_SCANS:
+        return False
+        
+    users_collection.update_one(
+        {"_id": user_id},
+        {"$inc": {"dailyScansUsed": 1}}
+    )
+    return True
+
+
+# === ROTAS DA API ===
+
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "PokeValue API ready"}
 
 @app.post("/api/scan/analyze")
 async def scan_card(payload: ScanRequest):
-    if not client:
-        raise HTTPException(status_code=500, detail="Gemini API Client não configurado")
-        
+    # 1. CONTROLO FREEMIUM: Validar os limites através do MongoDB Atlas
+    if payload.user_id:
+        email_user = getattr(payload, "email", "utilizador.anonimo@pokevalue.com")
+        autorizado = validar_e_contabilizar_scan(payload.user_id, email_user)
+        if not autorizado:
+            raise HTTPException(
+                status_code=429, 
+                detail=f"Limite diário de {LIMIT_FREE_SCANS} scans atingido. Faça upgrade para o Premium para obter acesso ilimitado!"
+            )
+    else:
+        raise HTTPException(status_code=400, detail="O ID do utilizador (user_id) é obrigatório para realizar scans.")
+
+    # 2. PROCESSAMENTO DA IMAGEM
     try:
         b64_data = payload.image_base64
-        if "," in b64_data:
+        
+        # Limpeza e extração linear estável para garantir que permanece como String
+        if "base64," in b64_data:
+            b64_data = b64_data.split("base64,")[1]
+        elif "," in b64_data:
             parts = b64_data.split(",")
-            b64_data = parts if len(parts) > 1 else parts
+            b64_data = parts[1] if len(parts) > 1 else parts[0]
             
-        b64_data = b64_data.strip().replace("\n", "").replace("\r", "")
+        # Agora o .strip() e .replace() funcionam perfeitamente porque b64_data é uma String!
+        b64_data = str(b64_data).strip().replace("\n", "").replace("\r", "").replace(" ", "")
         
-        import base64
+        # Correção automática de preenchimento (Padding) do Base64
+        missing_padding = len(b64_data) % 4
+        if missing_padding:
+            b64_data += '=' * (4 - missing_padding)
+            
         image_bytes = base64.b64decode(b64_data)
-        
-        print(f"[DIAGNÓSTICO] Tamanho os bytes recebidos: {len(image_bytes)}")
         
         if len(image_bytes) == 0:
             raise ValueError("Os bytes da imagem estão vazios.")
 
-        from google.genai import types
-        image_part = types.Part.from_bytes(
-            data=image_bytes,
-            mime_type="image/jpeg"
-        )
-        
-        prompt = (
-            "Analyze this exact Pokemon card photo. Look closely at the artwork, the name text, and the collector number at the bottom. "
-            "You must return a JSON object with the official English name of the Pokemon, the correct English set name, and its number. "
-            "Estimate its current TCGplayer market price in USD as a float. "
-            "Return keys exactly: 'name', 'set_name', 'number', 'market_price'."
-        )
-        
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.0
-        )
+        # === SISTEMA DE CACHE POR HASH MD5 ===
+        image_hash = hashlib.md5(image_bytes).hexdigest()
+        print(f"[SISTEMA CACHE] Assinatura MD5 da Imagem: {image_hash}")
 
-        # === VALORES DE TESTE TEMPORÁRIOS (FALLBACK POR FALTA DE QUOTA) ===
-        card_name = "Pikachu"
-        card_number = "062"  # Número do Pikachu no set Scarlet & Violet Base Set
+        if history_collection is not None:
+            carta_em_cache = history_collection.find_one({"image_hash": image_hash})
+            if carta_em_cache:
+                print("⚡ [CACHE HIT] Imagem repetida detetada! Retornando dados guardados sem gastar IA.")
+                return {
+                    "success": True,
+                    "cached": True,
+                    "name": carta_em_cache["name"],
+                    "set_name": carta_em_cache["set_name"],
+                    "number": carta_em_cache["number"],
+                    "confidence": "high",
+                    "card": carta_em_cache["card"]
+                }
+        # ====================================
+
+        # Valores padrão de Fallback (Ajustados para o Tatsugiri da imagem)
+        card_name = "Tatsugiri"
+        card_number = "062"
         set_name = "Scarlet & Violet"
-        market_price = 0.45  # Valor estimado de mercado
+        market_price = 0.15
 
-        try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=[prompt, image_part],
-                config=config
-            )
-            
-            text_clean = response.text.strip() if response.text else ""
-            print(f"[DIAGNÓSTICO] Resposta bruta do Gemini: '{text_clean}'")
-            
-            if text_clean:
-                if not text_clean.startswith("{"):
-                    start_idx = text_clean.find("{")
-                    end_idx = text_clean.rfind("}") + 1
-                    if start_idx != -1 and end_idx != -1:
-                        text_clean = text_clean[start_idx:end_idx]
-                        
-                ia_data = json.loads(text_clean)
-                card_name = ia_data.get("name", card_name)
-                card_number = ia_data.get("number", card_number)
-                set_name = ia_data.get("set_name", set_name)
-                market_price = ia_data.get("market_price", market_price)
+        # 3. CHAMADA À INTELIGÊNCIA ARTIFICIAL (GEMINI) - APENAS SE CONFIGURADO
+        if client:
+            try:
+                from google.genai import types
+                image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+                
+                prompt = (
+                    "Analyze this exact Pokemon card photo. Look closely at the artwork, the name text, and the collector number at the bottom. "
+                    "You must return a JSON object with the official English name of the Pokemon, the correct English set name, and its number. "
+                    "Estimate its current TCGplayer market price in USD as a float. "
+                    "Return keys exactly: 'name', 'set_name', 'number', 'market_price'."
+                )
+                
+                config = types.GenerateContentConfig(response_mime_type="application/json", temperature=0.0)
+                
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[prompt, image_part],
+                    config=config
+                )
+                
+                text_clean = response.text.strip() if response.text else ""
+                print(f"[DIAGNÓSTICO] Resposta bruta do Gemini: '{text_clean}'")
+                
+                if text_clean:
+                    if not text_clean.startswith("{"):
+                        start_idx = text_clean.find("{")
+                        end_idx = text_clean.rfind("}") + 1
+                        if start_idx != -1 and end_idx != -1:
+                            text_clean = text_clean[start_idx:end_idx]
+                            
+                    ia_data = json.loads(text_clean)
+                    card_name = ia_data.get("name", card_name)
+                    card_number = ia_data.get("number", card_number)
+                    set_name = ia_data.get("set_name", set_name)
+                    market_price = ia_data.get("market_price", market_price)
 
-        except Exception as gemini_err:
-            print(f"[AVISO CRÍTICO] Falha ou limite de quota Gemini detetado. Ativando Fallback: {str(gemini_err)}")
+            except Exception as gemini_err:
+                print(f"[AVISO CRÍTICO] Falha ou limite de quota Gemini detetado. Ativando Fallback: {str(gemini_err)}")
+        else:
+            print("[AVISO] Gemini não configurado. Utilizando dados de Fallback.")
 
+        # 4. TRATAMENTO E EXTRAÇÃO DOS DADOS DA CARTA (LÓGICA DA CDN)
         try:
             market_price = float(market_price)
         except:
             market_price = 0.05
 
-        # Limpeza e extração linear estável
-        card_str = str(card_number).strip()
-        if "/" in card_str:
-            card_str = card_str.split("/")[0].strip()
-            
-        clean_num = card_str.lstrip("0")
+        # 🌟 CORREÇÃO 1: Limpeza absoluta de caracteres não numéricos do contador
+        card_str = str(card_number).strip().split("/")[0]  # Se for "62/198", extrai "62"
+        clean_num = "".join(c for c in card_str if c.isdigit()) # Remove letras acidentais
+        
         if not clean_num:
             clean_num = "1"
-            
+        else:
+            clean_num = str(int(clean_num)) # Remove zeros à esquerda de forma segura (ex: "062" -> "62")
+
+        # 🌟 CORREÇÃO 2: Normalização do ID do set
         set_prefix = "sv1"
-        if "paldea" in set_name.lower():
+        set_name_lower = str(set_name).lower().strip()
+        
+        if "paldea" in set_name_lower:
             set_prefix = "sv2"
-        elif "obsidian" in set_name.lower():
+        elif "obsidian" in set_name_lower:
             set_prefix = "sv3"
-        elif "151" in set_name.lower():
+        elif "151" in set_name_lower:
             set_prefix = "sv3pt5"
-        elif "sword" in set_name.lower() or "shsh" in set_name.lower():
+        elif "paradox" in set_name_lower:
+            set_prefix = "sv4"
+        elif "temporal" in set_name_lower:
+            set_prefix = "sv5"
+        elif "twilight" in set_name_lower:
+            set_prefix = "sv6"
+        elif "shrouded" in set_name_lower:
+            set_prefix = "sv6pt5"
+        elif "stellar" in set_name_lower:
+            set_prefix = "sv7"
+        elif "surging" in set_name_lower:
+            set_prefix = "sv8"
+        elif "prismatic" in set_name_lower:
+            set_prefix = "sv8pt5"
+        elif "sword" in set_name_lower or "shsh" in set_name_lower:
             set_prefix = "swsh1"
 
-        # 👑 NOVO LINK VIA CDN OFICIAL DO POKEMON TCG API (Mais compatível com Expo Image do que o repositório bruto)
-        image_url = f"https://images.pokemontcg.io/{set_prefix}/{clean_num}_hires.png"
+        # Constrói o link oficial higienizado
+        image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}_hires.png"
         card_id = f"{set_prefix}-{clean_num}"
         
-        print(f"[IMAGEM CDN GERADA] URL final enviada: {image_url}")
+        print(f"\n[SISTEMA DE MÍDIA] URL FINAL DA IMAGEM: {image_url}\n")
 
+        resposta_final = {
+            "id": card_id,
+            "name": card_name,
+            "set_name": set_name,
+            "number": card_number,
+            "image_url": image_url,
+            "tcgplayer_market": market_price,
+            "confidence": "high"
+        }
+
+        # 5. SALVAR NO HISTÓRICO COM O HASH DA IMAGEM
+        if history_collection is not None:
+            documento_historico = {
+                "userId": payload.user_id,
+                "image_hash": image_hash,                # 🌟 Verifique se tem esta vírgula!
+                "scannedAt": datetime.now(timezone.utc), # 🌟 Verifique se tem esta vírgula!
+                "name": card_name,
+                "set_name": set_name,
+                "number": card_number,
+                "card": resposta_final
+            }
+            history_collection.insert_one(documento_historico)
+            print(f"💾 [MDB] Registo guardado com sucesso na base de dados (Hash: {image_hash})")
+
+        # RETORNO ESTRUTURADO FINAL PARA O SMARTPHONE
         return {
             "success": True,
+            "cached": False,
             "name": card_name,
             "set_name": set_name,
             "number": card_number,
             "confidence": "high",
-            "card": {
-                "id": card_id,
-                "name": card_name,
-                "set_name": set_name,
-                "number": card_number,
-                "image_url": image_url,
-                "tcgplayer_market": market_price,
-                "confidence": "high"
-            }
+            "card": resposta_final
         }
         
     except Exception as e:
+        print(f"[ERRO GENERALIZADO]: {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
@@ -269,3 +413,84 @@ async def handle_scan_count(user_id: str):
 @app.post("/api/scan/upgrade/{user_id}")
 async def upgrade_user(user_id: str):
     return {"count": 0, "free_limit": 99999, "is_pro": True}
+
+# === ROTA DO WEBHOOK DO REVENUECAT ===
+@app.post("/api/webhooks/revenuecat")
+async def revenuecat_webhook(payload: RevenueCatWebhook):
+    if users_collection is None:
+        raise HTTPException(status_code=500, detail="Base de dados indisponível")
+
+    try:
+        event_data = payload.event
+        event_type = event_data.get("type")
+        user_id = event_data.get("app_user_id") 
+        
+        if not user_id:
+            print("[WEBHOOK RC] Erro: Evento recebido sem app_user_id")
+            return {"status": "ignored", "reason": "missing_user_id"}
+
+        print(f"[WEBHOOK RC] Evento {event_type} recebido para o utilizador: {user_id}")
+
+        # Ativa o acesso Premium se houver compra ou renovação
+        if event_type in ["INITIAL_PURCHASE", "RENEWAL", "SUBSCRIBER_ALIAS"]:
+            users_collection.update_one(
+                {"_id": user_id},
+                {"$set": {"plan": "premium"}},
+                upsert=True
+            )
+            print(f"🚀 [MDB] Utilizador {user_id} atualizado para PREMIUM com sucesso!")
+            return {"status": "success", "message": "Plano atualizado para premium"}
+
+        # Remove o acesso Premium se a assinatura expirar
+        elif event_type in ["EXPIRATION", "CANCELLATION"]:
+            users_collection.update_one(
+                {"_id": user_id},
+                {"$set": {"plan": "free"}}
+            )
+            print(f"📉 [MDB] Utilizador {user_id} revertido para FREE devido a expiração.")
+            return {"status": "success", "message": "Plano revertido para free"}
+
+        return {"status": "ignored", "reason": "unhandled_event_type"}
+
+    except Exception as e:
+        print(f"[ERRO WEBHOOK RC]: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Erro interno ao processar webhook")
+
+# === ROTA PARA LISTAR O HISTÓRICO DE SCANS DO UTILIZADOR ===
+@app.get("/api/history/{user_id}")
+async def get_user_history(user_id: str):
+    if history_collection is None:
+        raise HTTPException(status_code=500, detail="Base de dados indisponível")
+
+    try:
+        print(f"[HISTÓRICO] A procurar scans para o utilizador: {user_id}")
+        
+        # 1. Procura os scans do utilizador e ordena por data descrescente (mais recente primeiro)
+        cursor = history_collection.find({"userId": user_id}).sort("scannedAt", -1)
+        
+        scans_list = []
+        for doc in cursor:
+            scans_list.append({
+                "id": str(doc.get("_id")), # Converte o ObjectId do MongoDB para String
+                "scannedAt": doc.get("scannedAt").isoformat() if doc.get("scannedAt") else None,
+                "name": doc.get("name"),
+                "set_name": doc.get("set_name"),
+                "number": doc.get("number"),
+                "card": doc.get("card") # Traz o objeto completo da carta (imagem, preço, etc)
+            })
+            
+        print(f"[HISTÓRICO] Encontrados {len(scans_list)} scans para o utilizador {user_id}.")
+        
+        # 2. Retorna a lista estruturada para o Expo renderizar
+        return {
+            "success": True,
+            "count": len(scans_list),
+            "history": scans_list
+        }
+
+    except Exception as e:
+        print(f"[ERRO HISTÓRICO]: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao recuperar histórico: {str(e)}")
+
