@@ -262,7 +262,7 @@ async def scan_card(payload: ScanRequest):
         elif "sword" in set_name_lower or "shsh" in set_name_lower:
             set_prefix = "swsh1"
 
-        # Constrói o link oficial higienizado com o subdomínio correto da CDN
+	# Constrói o link oficial higienizado com o subdomínio correto da CDN
         image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}_hires.png"
         card_id = f"{set_prefix}-{clean_num}"
         
