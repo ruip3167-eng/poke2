@@ -288,14 +288,14 @@ async def scan_card(payload: ScanRequest):
                 "name": card_name,
                 "set_name": set_name,
                 "number": card_number,
-                "image_url": image_url,
+                "image_url": image_url,  # 🌟 GARANTE QUE USA A VARIÁVEL CORRIGIDA DA SECÇÃO 4
                 "tcgplayer_market": market_price,
                 "confidence": "high"
             }
             history_collection.insert_one(documento_historico)
             print(f"💾 [MDB] Registo guardado com sucesso na base de dados (Hash: {image_hash})")
 
-        # RETORNO CORRIGIDO: Propriedades soltas na raiz para o card-detail.tsx ler diretamente
+        # RETORNO FINAL: Propriedades soltas na raiz prontas para o card-detail.tsx ler
         return {
             "success": True,
             "cached": False,
@@ -303,7 +303,7 @@ async def scan_card(payload: ScanRequest):
             "name": card_name,
             "set_name": set_name,
             "number": card_number,
-            "image_url": image_url,
+            "image_url": image_url,  # 🌟 GARANTE QUE USA A VARIÁVEL CORRIGIDA DA SECÇÃO 4
             "tcgplayer_market": market_price,
             "confidence": "high"
         }
