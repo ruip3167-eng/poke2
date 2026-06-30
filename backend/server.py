@@ -278,6 +278,13 @@ async def scan_card(payload: ScanRequest):
             "confidence": "high"
         }
 
+        # 🌟 TRUQUE DE SEGURANÇA FORÇADO: Reconstrói o URL ignorando qualquer conflito anterior
+        # Garante que usamos a CDN correta em vez do link quebrado
+        image_url = f"https://pokemontcg.io{set_prefix}/{clean_num}_hires.png"
+        card_id = f"{set_prefix}-{clean_num}"
+        
+        print(f"[RECONSTRUTOR FORÇADO] URL FINAL ENVIADA: {image_url}")
+
         # 5. SALVAR NO HISTÓRICO COM O HASH DA IMAGEM
         if history_collection is not None:
             documento_historico = {
@@ -288,14 +295,14 @@ async def scan_card(payload: ScanRequest):
                 "name": card_name,
                 "set_name": set_name,
                 "number": card_number,
-                "image_url": image_url,  # 🌟 GARANTE QUE USA A VARIÁVEL CORRIGIDA DA SECÇÃO 4
+                "image_url": image_url,
                 "tcgplayer_market": market_price,
                 "confidence": "high"
             }
             history_collection.insert_one(documento_historico)
             print(f"💾 [MDB] Registo guardado com sucesso na base de dados (Hash: {image_hash})")
 
-        # RETORNO FINAL: Propriedades soltas na raiz prontas para o card-detail.tsx ler
+        # RETORNO CORRIGIDO: Propriedades soltas na raiz para o card-detail.tsx ler diretamente
         return {
             "success": True,
             "cached": False,
@@ -303,11 +310,10 @@ async def scan_card(payload: ScanRequest):
             "name": card_name,
             "set_name": set_name,
             "number": card_number,
-            "image_url": image_url,  # 🌟 GARANTE QUE USA A VARIÁVEL CORRIGIDA DA SECÇÃO 4
+            "image_url": image_url,
             "tcgplayer_market": market_price,
             "confidence": "high"
         }
-        
     except Exception as e:
         print(f"[ERRO GENERALIZADO]: {str(e)}")
         traceback.print_exc()
